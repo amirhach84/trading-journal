@@ -3,6 +3,7 @@ const KEY = 'trading_discipline_v1';
 export const defaultState = {
   trades: [],
   weeklyPlans: [],
+  dailyLogs: [],
   cooldownUntil: null,
 };
 

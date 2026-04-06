@@ -7,8 +7,10 @@ import PostTrade   from './components/PostTrade';
 import Weekly      from './components/Weekly';
 import Performance from './components/Performance';
 import Rules       from './components/Rules';
+import DailyLog    from './components/DailyLog';
 
 const TABS = [
+  { id: 'daily', icon: '📓', label: 'יומי' },
   { id: 'pre',   icon: '📋', label: 'לפני' },
   { id: 'post',  icon: '📝', label: 'אחרי' },
   { id: 'week',  icon: '📅', label: 'שבועי' },
@@ -57,6 +59,12 @@ export default function App() {
 
   const isCooldown = !!(data.cooldownUntil && new Date() < new Date(data.cooldownUntil));
 
+  // Daily streak
+  const dailyLogs = data.dailyLogs || [];
+  let streak = 0;
+  const sortedLogs = [...dailyLogs].sort((a, b) => new Date(b.date) - new Date(a.date));
+  for (const log of sortedLogs) { if ((log.disciplineScore || 0) >= 6) streak++; else break; }
+
   const totalTrades = data.trades.length;
   const wins = data.trades.filter(t => t.result === 'win').length;
   const winRate = totalTrades > 0 ? Math.round((wins / totalTrades) * 100) : 0;
@@ -102,6 +110,7 @@ export default function App() {
               { label: 'Win%', value: `${winRate}%`, color: C.blue },
               { label: 'סה״כ פיפס', value: allPips >= 0 ? `+${allPips.toFixed(0)}` : allPips.toFixed(0), color: allPips >= 0 ? C.green : C.red },
               { label: '🎯 משמעת', value: avgDisc, color: C.accent },
+            { label: '🔥 Streak', value: streak > 0 ? streak + 'd' : '—', color: streak >= 5 ? C.green : C.text },
             ].map(s => (
               <div key={s.label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 9, padding: '8px 12px', textAlign: 'center', minWidth: 70, flexShrink: 0 }}>
                 <div style={{ color: s.color, fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>{s.value}</div>
@@ -132,6 +141,7 @@ export default function App() {
 
       {/* Content */}
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 16px' }}>
+        {tab === 'daily' && <DailyLog   {...tabProps} />}
         {tab === 'pre'   && <PreTrade    {...tabProps} isCooldown={isCooldown} weekStopped={weekStopped} weekSetups={weekSetups} />}
         {tab === 'post'  && <PostTrade   {...tabProps} />}
         {tab === 'week'  && <Weekly      {...tabProps} weekTrades={weekTrades} weekPips={weekPips} weekSetups={weekSetups} />}
