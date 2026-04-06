@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { C } from '../theme';
 import { Card, SectionTitle, Check, Input, Select, Textarea, ScoreSlider, Btn, SegmentedControl } from './UI';
 
+
+
 const PAIRS = ['GBPJPY', 'EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'EURJPY', 'אחר'];
 
 const emptyForm = () => ({
@@ -24,7 +26,64 @@ const emptyForm = () => ({
   disciplineScore: 7,
   patienceScore: 7,
   emotionScore: 7,
+  screenshots: ['', '', ''],
 });
+
+function TelegramScreenshot({ url, index, onChange }) {
+  const [imgError, setImgError] = useState(false);
+  const isValid = url && url.startsWith('http');
+
+  // Convert t.me link to direct image if possible
+  const getPreviewUrl = (link) => {
+    // Telegram public channel links — try to show as embed
+    return link;
+  };
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ color: C.muted, fontSize: 11, marginBottom: 5, letterSpacing: 0.5 }}>
+        📸 Screenshot {index + 1} {index === 0 ? '(Entry)' : index === 1 ? '(Exit)' : '(Multi-TF)'}
+      </div>
+      <input
+        type="url"
+        value={url}
+        onChange={e => onChange(e.target.value)}
+        placeholder="הדבק לינק מטלגרם..."
+        style={{
+          width: '100%', background: '#0d0d16', border: `1px solid ${isValid ? C.accent + '66' : C.border}`,
+          borderRadius: 9, padding: '10px 13px', color: C.text,
+          fontSize: 13, fontFamily: 'inherit', outline: 'none', marginBottom: isValid ? 8 : 0
+        }}
+        onFocus={e => e.target.style.borderColor = C.accent}
+        onBlur={e => e.target.style.borderColor = isValid ? C.accent + '66' : C.border}
+      />
+      {isValid && (
+        <div style={{ borderRadius: 9, overflow: 'hidden', border: `1px solid ${C.border}` }}>
+          {!imgError ? (
+            <img
+              src={url}
+              alt={`screenshot ${index + 1}`}
+              onError={() => setImgError(true)}
+              style={{ width: '100%', maxHeight: 200, objectFit: 'cover', display: 'block' }}
+            />
+          ) : (
+            <a href={url} target="_blank" rel="noopener noreferrer" style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
+              background: C.card2, color: C.accent, textDecoration: 'none', fontSize: 13
+            }}>
+              <span style={{ fontSize: 20 }}>📷</span>
+              <div>
+                <div style={{ fontWeight: 600 }}>פתח תמונה בטלגרם</div>
+                <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>{url.slice(0, 50)}...</div>
+              </div>
+              <span style={{ marginRight: 'auto', color: C.muted }}>↗</span>
+            </a>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function PostTrade({ data, save, showToast }) {
   const [form, setForm] = useState(emptyForm());
@@ -123,6 +182,25 @@ export default function PostTrade({ data, save, showToast }) {
           <span style={{ color: avgColor, fontSize: 26, fontWeight: 700 }}>{avgScore}</span>
           <span style={{ color: C.muted, fontSize: 13 }}>/10</span>
         </div>
+      </Card>
+
+      <Card>
+        <SectionTitle>📸 Screenshots מטלגרם</SectionTitle>
+        <div style={{ color: C.muted, fontSize: 12, marginBottom: 14, lineHeight: 1.7 }}>
+          שלח Screenshot לטלגרם ← לחץ לחיצה ארוכה על התמונה ← Copy Link ← הדבק כאן
+        </div>
+        {form.screenshots.map((url, i) => (
+          <TelegramScreenshot
+            key={i}
+            url={url}
+            index={i}
+            onChange={v => {
+              const s = [...form.screenshots];
+              s[i] = v;
+              set('screenshots', s);
+            }}
+          />
+        ))}
       </Card>
 
       <Btn onClick={handleSave} color={C.accent}>💾 שמור עסקה</Btn>
