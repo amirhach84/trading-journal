@@ -34,7 +34,6 @@ function TelegramScreenshot({ url, index, onChange }) {
   const isValid = url && url.startsWith('http');
 
   // Convert t.me link to direct image if possible
-  const getPreviewUrl = (link) => {
     // Telegram public channel links — try to show as embed
     return link;
   };

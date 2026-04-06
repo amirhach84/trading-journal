@@ -32,7 +32,6 @@ export default function DailyLog({ data, save, showToast }) {
 
   const recentLogs = [...(data.dailyLogs || [])].reverse().slice(0, 7);
 
-  const disciplineColor = form.disciplineScore >= 7 ? C.green : form.disciplineScore >= 5 ? C.warn : C.red;
 
   // Streak calculation
   const logs = data.dailyLogs || [];
