@@ -43,9 +43,15 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
 
   const handleSave = () => {
     if (!allChecked) { showToast('סמן את כל הסעיפים לפני הכניסה', 'err'); return; }
-    const log = { ...form, savedAt: new Date().toISOString(), type: 'pre' };
-    save({ ...data, lastPre: log });
-    showToast('✓ צ׳קליסט נשמר — בהצלחה בעסקה!');
+    const openTrade = {
+      ...form,
+      id: Date.now(),
+      savedAt: new Date().toISOString(),
+      status: 'open',
+    };
+    const openTrades = [...(data.openTrades || []), openTrade];
+    save({ ...data, openTrades, lastPre: openTrade });
+    showToast('✓ עסקה נפתחה — בהצלחה!');
   };
 
   const emotionColor = form.emotionalState <= 3 ? C.red : form.emotionalState <= 5 ? C.warn : C.green;
@@ -69,6 +75,28 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
         <Card style={{ background: '#1a120a', borderColor: C.warn }}>
           <div style={{ color: C.warn, fontWeight: 700, fontSize: 16, marginBottom: 6 }}>⚠️ השתמשת בשני ה-Setups השבועיים</div>
           <div style={{ color: C.text, fontSize: 14 }}>לא ניתן לקחת עסקאות נוספות השבוע.</div>
+        </Card>
+      )}
+
+      {/* Open trades */}
+      {(data.openTrades || []).length > 0 && (
+        <Card style={{ background: '#0d1a0d', borderColor: C.green + '44' }}>
+          <SectionTitle>עסקאות פתוחות כרגע 🟢</SectionTitle>
+          {(data.openTrades || []).map(t => (
+            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${C.border}` }}>
+              <div>
+                <span style={{ color: C.text, fontWeight: 600, fontSize: 14 }}>{t.pair}</span>
+                <span style={{ color: C.muted, fontSize: 12, marginRight: 8 }}>{t.date} {t.time}</span>
+                <span style={{ color: t.direction === 'long' ? C.green : C.red, fontSize: 12 }}>{t.direction === 'long' ? '▲ Long' : '▼ Short'}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, fontSize: 12, color: C.muted }}>
+                <span>Entry: {t.entry}</span>
+                <span>SL: {t.sl}</span>
+                <span>TP: {t.tp}</span>
+              </div>
+            </div>
+          ))}
+          <div style={{ color: C.muted, fontSize: 12, marginTop: 10, textAlign: 'center' }}>לסגירת עסקה עבור לטאב אחרי</div>
         </Card>
       )}
 

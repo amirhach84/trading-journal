@@ -83,15 +83,33 @@ function TelegramScreenshot({ url, index, onChange }) {
 
 export default function PostTrade({ data, save, showToast }) {
   const [form, setForm] = useState(emptyForm());
+  const [selectedOpenId, setSelectedOpenId] = useState(null);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const openTrades = data.openTrades || [];
+
+  const selectOpenTrade = (openTrade) => {
+    setSelectedOpenId(openTrade.id);
+    setForm(f => ({
+      ...f,
+      date: openTrade.date,
+      pair: openTrade.pair,
+      direction: openTrade.direction,
+      entry: openTrade.entry,
+      sl: openTrade.sl,
+      tp: openTrade.tp,
+      setupNum: openTrade.setupNum,
+    }));
+  };
 
   const avgScore = Math.round((form.disciplineScore + form.patienceScore + form.emotionScore) / 3);
   const avgColor = avgScore >= 7 ? C.green : avgScore >= 5 ? C.warn : C.red;
 
   const handleSave = () => {
     if (!form.pips && form.pips !== 0) { showToast('הזן כמה פיפס', 'err'); return; }
-    const trade = { ...form, pips: parseFloat(form.pips) || 0, savedAt: new Date().toISOString(), id: Date.now() };
-    let newData = { ...data, trades: [...data.trades, trade] };
+    const trade = { ...form, pips: parseFloat(form.pips) || 0, savedAt: new Date().toISOString(), id: selectedOpenId || Date.now(), status: 'closed' };
+    const remainingOpen = openTrades.filter(t => t.id !== selectedOpenId);
+    let newData = { ...data, trades: [...data.trades, trade], openTrades: remainingOpen };
     if (form.violatedRule) {
       const cd = new Date(); cd.setHours(cd.getHours() + 48);
       newData.cooldownUntil = cd.toISOString();
@@ -99,12 +117,50 @@ export default function PostTrade({ data, save, showToast }) {
     save(newData);
     showToast(form.violatedRule ? '⚠️ חריגה — עצירת 48 שעות הופעלה' : '✓ עסקה נשמרה!', form.violatedRule ? 'err' : 'ok');
     setForm(emptyForm());
+    setSelectedOpenId(null);
   };
 
   const recentTrades = [...data.trades].reverse().slice(0, 6);
 
   return (
     <div>
+      {/* Open trades selector */}
+      {openTrades.length > 0 && (
+        <Card style={{ background: '#0d1a0d', borderColor: C.green + '44' }}>
+          <SectionTitle>בחר עסקה לסגירה</SectionTitle>
+          {openTrades.map(t => (
+            <div key={t.id} onClick={() => selectOpenTrade(t)} style={{
+              padding: '12px 14px', marginBottom: 8, borderRadius: 9,
+              border: `1px solid ${selectedOpenId === t.id ? C.green : C.border}`,
+              background: selectedOpenId === t.id ? C.green + '15' : C.card2,
+              cursor: 'pointer', transition: 'all 0.15s'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <span style={{ color: C.text, fontWeight: 700, fontSize: 15 }}>{t.pair}</span>
+                  <span style={{ color: t.direction === 'long' ? C.green : C.red, fontSize: 12, marginRight: 8 }}>
+                    {t.direction === 'long' ? ' ▲ Long' : ' ▼ Short'}
+                  </span>
+                  <span style={{ color: C.muted, fontSize: 12 }}>{t.date} {t.time}</span>
+                </div>
+                <div style={{ fontSize: 12, color: C.muted, textAlign: 'left' }}>
+                  <div>Entry: {t.entry}</div>
+                  <div>SL: {t.sl} | TP: {t.tp}</div>
+                </div>
+              </div>
+              {selectedOpenId === t.id && (
+                <div style={{ color: C.green, fontSize: 12, marginTop: 6 }}>✓ נבחר — מלא את הפרטים למטה</div>
+              )}
+            </div>
+          ))}
+          {openTrades.length > 0 && !selectedOpenId && (
+            <div style={{ color: C.muted, fontSize: 12, textAlign: 'center', marginTop: 4 }}>
+              או מלא פרטים ידנית למטה לעסקה חדשה
+            </div>
+          )}
+        </Card>
+      )}
+
       {/* Result */}
       <Card>
         <SectionTitle>תוצאת העסקה</SectionTitle>

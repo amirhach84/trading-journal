@@ -190,6 +190,7 @@ function DailyDetail({ log, onClose }) {
 }
 
 export default function History({ data }) {
+  const openTrades = data.openTrades || [];
   const [filter, setFilter] = useState('all');
   const [selected, setSelected] = useState(null);
   const [selectedType, setSelectedType] = useState(null);
@@ -221,6 +222,35 @@ export default function History({ data }) {
       )}
       {selected && selectedType === 'daily' && (
         <DailyDetail log={selected} onClose={() => setSelected(null)} />
+      )}
+
+      {/* Open trades */}
+      {openTrades.length > 0 && (
+        <Card style={{ background: '#0d1a0d', borderColor: C.green + '44', marginBottom: 16 }}>
+          <SectionTitle>🟢 עסקאות פתוחות ({openTrades.length})</SectionTitle>
+          {openTrades.map(t => (
+            <div key={t.id} style={{ padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <span style={{ color: C.text, fontWeight: 700, fontSize: 15 }}>{t.pair}</span>
+                  <span style={{ color: t.direction === 'long' ? C.green : C.red, fontSize: 12, marginRight: 8 }}>
+                    {t.direction === 'long' ? ' ▲ Long' : ' ▼ Short'}
+                  </span>
+                  <span style={{ color: C.muted, fontSize: 12 }}>{t.date} {t.time}</span>
+                </div>
+                <div style={{ background: C.green + '22', border: `1px solid ${C.green}44`, borderRadius: 20, padding: '3px 10px', color: C.green, fontSize: 11, fontWeight: 600 }}>
+                  פתוחה
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 16, marginTop: 6, fontSize: 12, color: C.muted }}>
+                <span>Entry: <span style={{ color: C.text }}>{t.entry || '—'}</span></span>
+                <span>SL: <span style={{ color: C.red }}>{t.sl || '—'}</span></span>
+                <span>TP: <span style={{ color: C.green }}>{t.tp || '—'}</span></span>
+                <span>Setup #{t.setupNum}</span>
+              </div>
+            </div>
+          ))}
+        </Card>
       )}
 
       {/* Filter */}
