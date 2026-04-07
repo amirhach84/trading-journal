@@ -8,6 +8,7 @@ import Weekly      from './components/Weekly';
 import Performance from './components/Performance';
 import Rules       from './components/Rules';
 import DailyLog    from './components/DailyLog';
+import History     from './components/History';
 
 const TABS = [
   { id: 'daily', icon: '📓', label: 'יומי' },
@@ -15,6 +16,7 @@ const TABS = [
   { id: 'post',  icon: '📝', label: 'אחרי' },
   { id: 'week',  icon: '📅', label: 'שבועי' },
   { id: 'perf',  icon: '📊', label: 'ביצועים' },
+  { id: 'history', icon: '🗂', label: 'היסטוריה' },
   { id: 'rules', icon: '🚨', label: 'חוקים' },
 ];
 
@@ -142,6 +144,7 @@ export default function App() {
       {/* Content */}
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 16px' }}>
         {tab === 'daily' && <DailyLog   {...tabProps} />}
+        {tab === 'history' && <History    {...tabProps} />}
         {tab === 'pre'   && <PreTrade    {...tabProps} isCooldown={isCooldown} weekStopped={weekStopped} weekSetups={weekSetups} />}
         {tab === 'post'  && <PostTrade   {...tabProps} />}
         {tab === 'week'  && <Weekly      {...tabProps} weekTrades={weekTrades} weekPips={weekPips} weekSetups={weekSetups} />}
