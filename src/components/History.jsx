@@ -323,7 +323,7 @@ export default function History({ data }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <span style={{ color: C.muted, fontSize: 11, background: C.blue + '22', color: C.blue, padding: '2px 8px', borderRadius: 10 }}>📓 יומי</span>
+                        <span style={{ fontSize: 11, background: C.blue + '22', color: C.blue, padding: '2px 8px', borderRadius: 10 }}>📓 יומי</span>
                         <span style={{ color: C.muted, fontSize: 12 }}>{entry.date}</span>
                       </div>
                       <span style={{ color: SETUP_COLORS[entry.sawSetup] || C.muted, fontSize: 13, fontWeight: 600 }}>
