@@ -61,13 +61,18 @@ export async function saveToCloud(data) {
 }
 
 export async function loadData() {
+  // Always try cloud first — ignore local cache
   const cloud = await loadFromCloud();
   if (cloud) {
-    saveLocal(cloud);
+    saveLocal(cloud); // sync local to match cloud
     return cloud;
   }
+  // Cloud unavailable (offline) — fall back to local
   const local = loadLocal();
-  return local || defaultState;
+  if (local && local.trades && local.trades.length > 0) {
+    return local;
+  }
+  return defaultState;
 }
 
 export function saveData(data) {
