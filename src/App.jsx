@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { C } from './theme';
-import { loadData, saveData } from './storage';
+import { loadData, saveData, loadLocal } from './storage';
 import { Toast } from './components/UI';
 import PreTrade    from './components/PreTrade';
 import PostTrade   from './components/PostTrade';
@@ -32,7 +32,17 @@ export default function App() {
   const [tab, setTab] = useState('pre');
   const [toast, setToast] = useState(null);
 
-  useEffect(() => { setData(loadData()); }, []);
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    const local = loadLocal();
+    if (local) setData(local);
+    setSyncing(true);
+    loadData().then(d => {
+      setData(d);
+      setSyncing(false);
+    });
+  }, []);
 
   const save = useCallback((newData) => {
     setData(newData);
@@ -89,6 +99,7 @@ export default function App() {
             <div>
               <div style={{ color: C.accent, fontSize: 10, letterSpacing: 3, fontWeight: 700, marginBottom: 3 }}>מסחר • משמעת • 30 יום</div>
               <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: C.text, letterSpacing: -0.3 }}>יומן המשמעת</h1>
+            {syncing && <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>מסנכרן...</div>}
             </div>
             <div style={{ textAlign: 'left' }}>
               {isCooldown && (
