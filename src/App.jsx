@@ -66,8 +66,13 @@ export default function App() {
   const weekStart = getWeekStart();
   const weekTrades = data.trades.filter(t => new Date(t.date) >= weekStart);
   const weekPips   = weekTrades.reduce((s, t) => s + (t.pips || 0), 0);
-  const weekSetups = weekTrades.length;
   const weekStopped = weekPips >= 100;
+
+  // Daily setups — max 2 per day
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const dayTrades = data.trades.filter(t => t.date === todayStr);
+  const weekSetups = weekTrades.length; // keep for display
+  const daySetups = dayTrades.length + (data.openTrades || []).filter(t => t.date === todayStr).length;
 
   const isCooldown = !!(data.cooldownUntil && new Date() < new Date(data.cooldownUntil));
 
@@ -119,7 +124,7 @@ export default function App() {
           <div style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto', paddingBottom: 2 }}>
             {[
               { label: 'פיפס שבוע', value: `${weekPips.toFixed(0)}/100`, color: weekStopped ? C.red : weekPips > 60 ? C.warn : C.green },
-              { label: 'Setups', value: `${weekSetups}/2`, color: weekSetups >= 2 ? C.red : C.text },
+              { label: 'Setups היום', value: `${daySetups}/2`, color: daySetups >= 2 ? C.red : C.text },
               { label: 'Win%', value: `${winRate}%`, color: C.blue },
               { label: 'סה״כ פיפס', value: allPips >= 0 ? `+${allPips.toFixed(0)}` : allPips.toFixed(0), color: allPips >= 0 ? C.green : C.red },
               { label: '🎯 משמעת', value: avgDisc, color: C.accent },
@@ -156,7 +161,7 @@ export default function App() {
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 16px' }}>
         {tab === 'daily' && <DailyLog   {...tabProps} />}
         {tab === 'history' && <History    {...tabProps} />}
-        {tab === 'pre'   && <PreTrade    {...tabProps} isCooldown={isCooldown} weekStopped={weekStopped} weekSetups={weekSetups} />}
+        {tab === 'pre'   && <PreTrade    {...tabProps} isCooldown={isCooldown} weekStopped={weekStopped} weekSetups={weekSetups} daySetups={daySetups} />}
         {tab === 'post'  && <PostTrade   {...tabProps} />}
         {tab === 'week'  && <Weekly      {...tabProps} weekTrades={weekTrades} weekPips={weekPips} weekSetups={weekSetups} />}
         {tab === 'perf'  && <Performance {...tabProps} />}
