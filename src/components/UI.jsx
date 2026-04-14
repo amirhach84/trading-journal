@@ -56,10 +56,10 @@ export function Input({ label, value, onChange, type = 'text', placeholder, half
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         style={{
-          width: '100%', background: C.card2, border: `1px solid ${C.border}`,
+          width: '100%', minWidth: 0, maxWidth: '100%', background: C.card2, border: `1px solid ${C.border}`,
           borderRadius: 9, padding: '11px 13px', color: C.text,
           fontSize: 14, fontFamily: 'inherit', outline: 'none',
-          transition: 'border-color 0.15s'
+          transition: 'border-color 0.15s', boxSizing: 'border-box'
         }}
         onFocus={e => e.target.style.borderColor = C.accent}
         onBlur={e => e.target.style.borderColor = C.border}

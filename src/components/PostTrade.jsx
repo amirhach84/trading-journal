@@ -184,8 +184,14 @@ export default function PostTrade({ data, save, showToast }) {
       {/* Result */}
       <Card>
         <SectionTitle>תוצאת העסקה</SectionTitle>
-        <Input label="תאריך" type="date" value={form.date} onChange={v => set('date', v)} />
-        <Select label="צמד" value={form.pair} onChange={v => set('pair', v)} options={PAIRS} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, minWidth: 0 }}>
+          <div style={{ minWidth: 0, overflow: 'hidden' }}>
+            <Input label="תאריך" type="date" value={form.date} onChange={v => set('date', v)} />
+          </div>
+          <div style={{ minWidth: 0, overflow: 'hidden' }}>
+            <Select label="צמד" value={form.pair} onChange={v => set('pair', v)} options={PAIRS} />
+          </div>
+        </div>
 
         <div style={{ marginBottom: 14 }}>
           <div style={{ color: C.muted, fontSize: 11, marginBottom: 7, letterSpacing: 0.5 }}>תוצאה</div>
