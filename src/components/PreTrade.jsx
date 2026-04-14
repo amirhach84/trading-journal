@@ -104,10 +104,8 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
       {/* Trade details */}
       <Card>
         <SectionTitle>פרטי העסקה</SectionTitle>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <Input label="תאריך" type="date" value={form.date} onChange={v => set('date', v)} />
-          <Input label="שעה" type="time" value={form.time} onChange={v => set('time', v)} />
-        </div>
+        <Input label="תאריך" type="date" value={form.date} onChange={v => set('date', v)} />
+        <Input label="שעה" type="time" value={form.time} onChange={v => set('time', v)} />
         <Select label="צמד" value={form.pair} onChange={v => set('pair', v)} options={PAIRS} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <div>
