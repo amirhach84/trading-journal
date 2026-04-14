@@ -107,9 +107,29 @@ export default function PostTrade({ data, save, showToast }) {
 
   const handleSave = () => {
     if (!form.pips && form.pips !== 0) { showToast('הזן כמה פיפס', 'err'); return; }
-    const trade = { ...form, pips: parseFloat(form.pips) || 0, savedAt: new Date().toISOString(), id: selectedOpenId || Date.now(), status: 'closed' };
-    const remainingOpen = openTrades.filter(t => t.id !== selectedOpenId);
-    let newData = { ...data, trades: [...data.trades, trade], openTrades: remainingOpen };
+    
+    const tradeId = selectedOpenId || Date.now();
+    const trade = { ...form, pips: parseFloat(form.pips) || 0, savedAt: new Date().toISOString(), id: tradeId, status: 'closed' };
+    
+    // Always remove from openTrades:
+    // 1. If selectedOpenId — remove the matched one
+    // 2. If no selectedOpenId but there's only one open trade — remove it too (user forgot to select)
+    let remainingOpen;
+    if (selectedOpenId) {
+      remainingOpen = openTrades.filter(t => t.id !== selectedOpenId);
+    } else if (openTrades.length === 1) {
+      remainingOpen = []; // auto-close the only open trade
+    } else {
+      remainingOpen = openTrades; // multiple open — don't guess which to close
+    }
+    
+    // Avoid duplicate trades (same id already exists)
+    const existingIds = new Set(data.trades.map(t => t.id));
+    const newTrades = existingIds.has(tradeId)
+      ? data.trades.map(t => t.id === tradeId ? trade : t)
+      : [...data.trades, trade];
+    
+    let newData = { ...data, trades: newTrades, openTrades: remainingOpen };
     if (form.violatedRule) {
       const cd = new Date(); cd.setHours(cd.getHours() + 48);
       newData.cooldownUntil = cd.toISOString();

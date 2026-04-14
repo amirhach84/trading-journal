@@ -17,7 +17,7 @@ const CHECKLIST = [
 
 const PAIRS = ['GBPJPY', 'EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'EURJPY', 'אחר'];
 
-export default function PreTrade({ data, save, showToast, isCooldown, weekStopped, weekSetups }) {
+export default function PreTrade({ data, save, showToast, isCooldown, weekStopped, weekSetups, daySetups }) {
   const today = new Date().toISOString().slice(0, 10);
   const now = new Date();
   const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -39,7 +39,8 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
   };
 
   const allChecked = form.checks.every(Boolean) && form.declarationRead;
-  const blocked = isCooldown || weekStopped || (weekSetups >= 2);
+  const dayLimit = daySetups >= 2;
+  const blocked = isCooldown || weekStopped || dayLimit;
 
   const handleSave = () => {
     if (!allChecked) { showToast('סמן את כל הסעיפים לפני הכניסה', 'err'); return; }
@@ -71,10 +72,10 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
           <div style={{ color: C.text, fontSize: 14 }}>שבוע המסחר הסתיים. חזור שבוע הבא. כל הכבוד.</div>
         </Card>
       )}
-      {!isCooldown && !weekStopped && weekSetups >= 2 && (
+      {!isCooldown && !weekStopped && daySetups >= 2 && (
         <Card style={{ background: '#1a120a', borderColor: C.warn }}>
-          <div style={{ color: C.warn, fontWeight: 700, fontSize: 16, marginBottom: 6 }}>⚠️ השתמשת בשני ה-Setups השבועיים</div>
-          <div style={{ color: C.text, fontSize: 14 }}>לא ניתן לקחת עסקאות נוספות השבוע.</div>
+          <div style={{ color: C.warn, fontWeight: 700, fontSize: 16, marginBottom: 6 }}>⚠️ הגעת למקסימום 2 עסקאות להיום</div>
+          <div style={{ color: C.text, fontSize: 14 }}>לא ניתן לקחת עסקאות נוספות היום. חזור מחר.</div>
         </Card>
       )}
 
@@ -201,7 +202,7 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
       />
 
       <Btn onClick={handleSave} disabled={!allChecked || blocked} color={C.green}>
-        {blocked ? '🚫 מסחר חסום כרגע' : allChecked ? '✓ שמור צ׳קליסט ועבור לעסקה' : 'יש לסמן את כל הסעיפים'}
+        {isCooldown ? '🚫 עצירת 48 שעות פעילה' : weekStopped ? '🚫 הגעת ל-100 פיפס השבוע' : dayLimit ? '🚫 מקסימום 2 עסקאות היום' : allChecked ? '✓ שמור צ׳קליסט ועבור לעסקה' : 'יש לסמן את כל הסעיפים'}
       </Btn>
     </div>
   );
