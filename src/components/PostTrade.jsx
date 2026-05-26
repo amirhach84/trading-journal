@@ -2,13 +2,17 @@ import { useState } from 'react';
 import { C } from '../theme';
 import { Card, SectionTitle, Check, Input, Select, Textarea, ScoreSlider, Btn, SegmentedControl } from './UI';
 
-
-
 const PAIRS = ['GBPJPY', 'EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'EURJPY', 'אחר'];
 
 const emptyForm = () => ({
   date: new Date().toISOString().slice(0, 10),
+  closeTime: new Date().toTimeString().slice(0, 5),
   pair: 'GBPJPY',
+  direction: 'long',
+  setupNum: '1',
+  entry: '',
+  sl: '',
+  tp: '',
   result: 'win',
   pips: '',
   closedByPlan: true,
@@ -32,41 +36,23 @@ const emptyForm = () => ({
 function TelegramScreenshot({ url, index, onChange }) {
   const [imgError, setImgError] = useState(false);
   const isValid = url && url.startsWith('http');
-
-
-
   return (
     <div style={{ marginBottom: 12 }}>
       <div style={{ color: C.muted, fontSize: 11, marginBottom: 5, letterSpacing: 0.5 }}>
-        📸 Screenshot {index + 1} {index === 0 ? '(Entry)' : index === 1 ? '(Exit)' : '(Multi-TF)'}
+        📸 {['Entry', 'Exit', 'Multi-TF'][index]}
       </div>
-      <input
-        type="url"
-        value={url}
-        onChange={e => onChange(e.target.value)}
+      <input type="url" value={url} onChange={e => onChange(e.target.value)}
         placeholder="הדבק לינק מטלגרם..."
-        style={{
-          width: '100%', background: '#0d0d16', border: `1px solid ${isValid ? C.accent + '66' : C.border}`,
-          borderRadius: 9, padding: '10px 13px', color: C.text,
-          fontSize: 13, fontFamily: 'inherit', outline: 'none', marginBottom: isValid ? 8 : 0
-        }}
-        onFocus={e => e.target.style.borderColor = C.accent}
-        onBlur={e => e.target.style.borderColor = isValid ? C.accent + '66' : C.border}
+        style={{ width: '100%', background: '#0d0d16', border: `1px solid ${isValid ? C.accent + '66' : C.border}`, borderRadius: 9, padding: '10px 13px', color: C.text, fontSize: 13, fontFamily: 'inherit', outline: 'none', marginBottom: isValid ? 8 : 0, boxSizing: 'border-box' }}
       />
       {isValid && (
         <div style={{ borderRadius: 9, overflow: 'hidden', border: `1px solid ${C.border}` }}>
           {!imgError ? (
-            <img
-              src={url}
-              alt={`screenshot ${index + 1}`}
-              onError={() => setImgError(true)}
-              style={{ width: '100%', maxHeight: 200, objectFit: 'cover', display: 'block' }}
-            />
+            <img src={url} alt={`screenshot ${index + 1}`} onError={() => setImgError(true)}
+              style={{ width: '100%', maxHeight: 200, objectFit: 'cover', display: 'block' }} />
           ) : (
-            <a href={url} target="_blank" rel="noopener noreferrer" style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
-              background: C.card2, color: C.accent, textDecoration: 'none', fontSize: 13
-            }}>
+            <a href={url} target="_blank" rel="noopener noreferrer"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: C.card2, color: C.accent, textDecoration: 'none', fontSize: 13 }}>
               <span style={{ fontSize: 20 }}>📷</span>
               <div>
                 <div style={{ fontWeight: 600 }}>פתח תמונה בטלגרם</div>
@@ -95,10 +81,10 @@ export default function PostTrade({ data, save, showToast }) {
       date: openTrade.date,
       pair: openTrade.pair,
       direction: openTrade.direction,
-      entry: openTrade.entry,
-      sl: openTrade.sl,
-      tp: openTrade.tp,
-      setupNum: openTrade.setupNum,
+      entry: openTrade.entry || '',
+      sl: openTrade.sl || '',
+      tp: openTrade.tp || '',
+      setupNum: openTrade.setupNum || '1',
     }));
   };
 
@@ -107,28 +93,23 @@ export default function PostTrade({ data, save, showToast }) {
 
   const handleSave = () => {
     if (!form.pips && form.pips !== 0) { showToast('הזן כמה פיפס', 'err'); return; }
-    
     const tradeId = selectedOpenId || Date.now();
     const trade = { ...form, pips: parseFloat(form.pips) || 0, savedAt: new Date().toISOString(), id: tradeId, status: 'closed' };
-    
-    // Always remove from openTrades:
-    // 1. If selectedOpenId — remove the matched one
-    // 2. If no selectedOpenId but there's only one open trade — remove it too (user forgot to select)
+
     let remainingOpen;
     if (selectedOpenId) {
       remainingOpen = openTrades.filter(t => t.id !== selectedOpenId);
     } else if (openTrades.length === 1) {
-      remainingOpen = []; // auto-close the only open trade
+      remainingOpen = [];
     } else {
-      remainingOpen = openTrades; // multiple open — don't guess which to close
+      remainingOpen = openTrades;
     }
-    
-    // Avoid duplicate trades (same id already exists)
+
     const existingIds = new Set(data.trades.map(t => t.id));
     const newTrades = existingIds.has(tradeId)
       ? data.trades.map(t => t.id === tradeId ? trade : t)
       : [...data.trades, trade];
-    
+
     let newData = { ...data, trades: newTrades, openTrades: remainingOpen };
     if (form.violatedRule) {
       const cd = new Date(); cd.setHours(cd.getHours() + 48);
@@ -173,45 +154,51 @@ export default function PostTrade({ data, save, showToast }) {
               )}
             </div>
           ))}
-          {openTrades.length > 0 && !selectedOpenId && (
-            <div style={{ color: C.muted, fontSize: 12, textAlign: 'center', marginTop: 4 }}>
-              או מלא פרטים ידנית למטה לעסקה חדשה
-            </div>
-          )}
         </Card>
       )}
 
       {/* Result */}
       <Card>
         <SectionTitle>תוצאת העסקה</SectionTitle>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, minWidth: 0 }}>
-          <div style={{ minWidth: 0, overflow: 'hidden' }}>
-            <Input label="תאריך" type="date" value={form.date} onChange={v => set('date', v)} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, overflow: 'hidden' }}>
+          <div style={{ minWidth: 0 }}>
+            <Input label="תאריך סגירה" type="date" value={form.date} onChange={v => set('date', v)} />
           </div>
-          <div style={{ minWidth: 0, overflow: 'hidden' }}>
-            <Select label="צמד" value={form.pair} onChange={v => set('pair', v)} options={PAIRS} />
+          <div style={{ minWidth: 0 }}>
+            <Input label="שעת סגירה" type="time" value={form.closeTime} onChange={v => set('closeTime', v)} />
           </div>
+        </div>
+        <Select label="צמד" value={form.pair} onChange={v => set('pair', v)} options={PAIRS} />
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div>
+            <div style={{ color: C.muted, fontSize: 11, marginBottom: 7, letterSpacing: 0.5 }}>כיוון</div>
+            <SegmentedControl value={form.direction} onChange={v => set('direction', v)} options={[
+              { value: 'long', label: '🟢 Long', color: C.green },
+              { value: 'short', label: '🔴 Short', color: C.red },
+            ]} />
+          </div>
+          <Input label="Setup מס׳" value={form.setupNum} onChange={v => set('setupNum', v)} />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <Input label="Entry" value={form.entry} onChange={v => set('entry', v)} placeholder="211.40" />
+          <Input label="Stop Loss" value={form.sl} onChange={v => set('sl', v)} placeholder="211.05" />
+          <Input label="Take Profit" value={form.tp} onChange={v => set('tp', v)} placeholder="212.10" />
         </div>
 
         <div style={{ marginBottom: 14 }}>
           <div style={{ color: C.muted, fontSize: 11, marginBottom: 7, letterSpacing: 0.5 }}>תוצאה</div>
-          <SegmentedControl
-            value={form.result}
-            onChange={v => set('result', v)}
-            options={[
-              { value: 'win', label: '🟢 רווח', color: C.green },
-              { value: 'loss', label: '🔴 הפסד', color: C.red },
-              { value: 'be', label: '⚪ BE', color: C.muted },
-            ]}
-          />
+          <SegmentedControl value={form.result} onChange={v => set('result', v)} options={[
+            { value: 'win', label: '🟢 רווח', color: C.green },
+            { value: 'loss', label: '🔴 הפסד', color: C.red },
+            { value: 'be', label: '⚪ BE', color: C.muted },
+          ]} />
         </div>
 
-        <Input
-          label={`פיפס ${form.result === 'loss' ? '(מינוס להפסד, למשל -30)' : ''}`}
-          type="number" value={form.pips}
-          onChange={v => set('pips', v)}
-          placeholder={form.result === 'loss' ? '-30' : '40'}
-        />
+        <Input label={`פיפס ${form.result === 'loss' ? '(מינוס להפסד)' : ''}`}
+          type="number" value={form.pips} onChange={v => set('pips', v)}
+          placeholder={form.result === 'loss' ? '-30' : '40'} />
       </Card>
 
       {/* Execution */}
@@ -224,19 +211,14 @@ export default function PostTrade({ data, save, showToast }) {
         <Check label="ניסיתי לעשות Home Run ❌" checked={form.triedHomeRun} onChange={() => set('triedHomeRun', !form.triedHomeRun)} danger />
         <Check label="שיניתי משהו מתוך רגש ❌" checked={form.changedFromEmotion} onChange={() => set('changedFromEmotion', !form.changedFromEmotion)} danger />
         <Check label="ניסיתי להחזיר הפסד ❌" checked={form.triedToRecover} onChange={() => set('triedToRecover', !form.triedToRecover)} danger />
-
         <div style={{ marginTop: 12, padding: '12px 14px', background: '#120808', border: `1px solid ${C.red}33`, borderRadius: 10 }}>
-          <Check
-            label="הפרתי חוק מהתוכנית — יש להפעיל עצירת 48 שעות 🚫"
-            checked={form.violatedRule}
-            onChange={() => set('violatedRule', !form.violatedRule)}
-            danger
-            sub="הזזת SL / משיכת TP / setup מאולתר / ניסיון החזרה"
-          />
+          <Check label="הפרתי חוק מהתוכנית — יש להפעיל עצירת 48 שעות 🚫"
+            checked={form.violatedRule} onChange={() => set('violatedRule', !form.violatedRule)} danger
+            sub="הזזת SL / משיכת TP / setup מאולתר / ניסיון החזרה" />
         </div>
       </Card>
 
-      {/* Mental analysis */}
+      {/* Mental */}
       <Card>
         <SectionTitle>ניתוח מנטלי</SectionTitle>
         <Textarea label="למה נכנסתי לעסקה?" value={form.whyEntered} onChange={v => set('whyEntered', v)} placeholder="הסיבה האמיתית..." rows={2} />
@@ -260,22 +242,16 @@ export default function PostTrade({ data, save, showToast }) {
         </div>
       </Card>
 
+      {/* Screenshots */}
       <Card>
         <SectionTitle>📸 Screenshots מטלגרם</SectionTitle>
         <div style={{ color: C.muted, fontSize: 12, marginBottom: 14, lineHeight: 1.7 }}>
-          שלח Screenshot לטלגרם ← לחץ לחיצה ארוכה על התמונה ← Copy Link ← הדבק כאן
+          שלח Screenshot לטלגרם ← לחץ לחיצה ארוכה ← Copy Link ← הדבק כאן
         </div>
         {form.screenshots.map((url, i) => (
-          <TelegramScreenshot
-            key={i}
-            url={url}
-            index={i}
-            onChange={v => {
-              const s = [...form.screenshots];
-              s[i] = v;
-              set('screenshots', s);
-            }}
-          />
+          <TelegramScreenshot key={i} url={url} index={i} onChange={v => {
+            const s = [...form.screenshots]; s[i] = v; set('screenshots', s);
+          }} />
         ))}
       </Card>
 
@@ -294,10 +270,7 @@ export default function PostTrade({ data, save, showToast }) {
               </div>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                 <span style={{ color: C.muted, fontSize: 12 }}>🎯 {t.disciplineScore}/10</span>
-                <span style={{
-                  color: t.pips > 0 ? C.green : t.pips < 0 ? C.red : C.muted,
-                  fontWeight: 700, fontSize: 17
-                }}>
+                <span style={{ color: t.pips > 0 ? C.green : t.pips < 0 ? C.red : C.muted, fontWeight: 700, fontSize: 17 }}>
                   {t.pips > 0 ? '+' : ''}{t.pips}p
                 </span>
               </div>

@@ -34,12 +34,11 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const toggleCheck = (i) => {
-    const c = [...form.checks]; c[i] = !c[i];
-    set('checks', c);
+    const c = [...form.checks]; c[i] = !c[i]; set('checks', c);
   };
 
   const allChecked = form.checks.every(Boolean) && form.declarationRead;
-  const dayLimit = daySetups >= 2;
+  const dayLimit = (daySetups || 0) >= 2;
   const blocked = isCooldown || weekStopped || dayLimit;
 
   const handleSave = () => {
@@ -59,7 +58,6 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
 
   return (
     <div>
-      {/* Block banners */}
       {isCooldown && (
         <Card style={{ background: '#1a0808', borderColor: C.red }}>
           <div style={{ color: C.red, fontWeight: 700, fontSize: 16, marginBottom: 6 }}>🚫 עצירת 48 שעות פעילה</div>
@@ -72,101 +70,88 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
           <div style={{ color: C.text, fontSize: 14 }}>שבוע המסחר הסתיים. חזור שבוע הבא. כל הכבוד.</div>
         </Card>
       )}
-      {!isCooldown && !weekStopped && daySetups >= 2 && (
+      {!isCooldown && !weekStopped && dayLimit && (
         <Card style={{ background: '#1a120a', borderColor: C.warn }}>
           <div style={{ color: C.warn, fontWeight: 700, fontSize: 16, marginBottom: 6 }}>⚠️ הגעת למקסימום 2 עסקאות להיום</div>
           <div style={{ color: C.text, fontSize: 14 }}>לא ניתן לקחת עסקאות נוספות היום. חזור מחר.</div>
         </Card>
       )}
 
-      {/* Open trades */}
+      {/* Open trades display */}
       {(data.openTrades || []).length > 0 && (
         <Card style={{ background: '#0d1a0d', borderColor: C.green + '44' }}>
           <SectionTitle>עסקאות פתוחות כרגע 🟢</SectionTitle>
           {(data.openTrades || []).map(t => (
-            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${C.border}` }}>
-              <div>
-                <span style={{ color: C.text, fontWeight: 600, fontSize: 14 }}>{t.pair}</span>
-                <span style={{ color: C.muted, fontSize: 12, marginRight: 8 }}>{t.date} {t.time}</span>
-                <span style={{ color: t.direction === 'long' ? C.green : C.red, fontSize: 12 }}>{t.direction === 'long' ? '▲ Long' : '▼ Short'}</span>
+            <div key={t.id} style={{ padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <span style={{ color: C.text, fontWeight: 600, fontSize: 14 }}>{t.pair}</span>
+                  <span style={{ color: C.muted, fontSize: 12, marginRight: 8 }}>{t.date} {t.time}</span>
+                  <span style={{ color: t.direction === 'long' ? C.green : C.red, fontSize: 12 }}>
+                    {t.direction === 'long' ? '▲ Long' : '▼ Short'}
+                  </span>
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: 8, fontSize: 12, color: C.muted }}>
-                <span>Entry: {t.entry}</span>
-                <span>SL: {t.sl}</span>
-                <span>TP: {t.tp}</span>
+              <div style={{ display: 'flex', gap: 14, marginTop: 6, fontSize: 12, color: C.muted }}>
+                <span>Entry: <span style={{ color: C.text }}>{t.entry || '—'}</span></span>
+                <span>SL: <span style={{ color: C.red }}>{t.sl || '—'}</span></span>
+                <span>TP: <span style={{ color: C.green }}>{t.tp || '—'}</span></span>
               </div>
             </div>
           ))}
-          <div style={{ color: C.muted, fontSize: 12, marginTop: 10, textAlign: 'center' }}>לסגירת עסקה עבור לטאב אחרי</div>
+          <div style={{ color: C.muted, fontSize: 12, marginTop: 10, textAlign: 'center' }}>לסגירת עסקה עבור לטאב "אחרי"</div>
         </Card>
       )}
 
       {/* Trade details */}
       <Card>
         <SectionTitle>פרטי העסקה</SectionTitle>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, minWidth: 0 }}>
-          <div style={{ minWidth: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, overflow: 'hidden' }}>
+          <div style={{ minWidth: 0 }}>
             <Input label="תאריך" type="date" value={form.date} onChange={v => set('date', v)} />
           </div>
-          <div style={{ minWidth: 0, overflow: 'hidden' }}>
-            <Input label="שעה" type="time" value={form.time} onChange={v => set('time', v)} />
+          <div style={{ minWidth: 0 }}>
+            <Input label="שעת כניסה" type="time" value={form.time} onChange={v => set('time', v)} />
           </div>
         </div>
         <Select label="צמד" value={form.pair} onChange={v => set('pair', v)} options={PAIRS} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <div>
             <div style={{ color: C.muted, fontSize: 11, marginBottom: 5, letterSpacing: 0.5 }}>כיוון</div>
-            <SegmentedControl
-              value={form.direction}
-              onChange={v => set('direction', v)}
-              options={[
-                { value: 'long', label: '🟢 Long', color: C.green },
-                { value: 'short', label: '🔴 Short', color: C.red },
-              ]}
-            />
+            <SegmentedControl value={form.direction} onChange={v => set('direction', v)} options={[
+              { value: 'long', label: '🟢 Long', color: C.green },
+              { value: 'short', label: '🔴 Short', color: C.red },
+            ]} />
           </div>
           <div>
             <div style={{ color: C.muted, fontSize: 11, marginBottom: 5, letterSpacing: 0.5 }}>Setup מס׳</div>
-            <SegmentedControl
-              value={form.setupNum}
-              onChange={v => set('setupNum', v)}
-              options={[
-                { value: '1', label: 'ראשון', color: C.accent },
-                { value: '2', label: 'שני', color: C.accent },
-              ]}
-            />
+            <SegmentedControl value={form.setupNum} onChange={v => set('setupNum', v)} options={[
+              { value: '1', label: 'ראשון', color: C.accent },
+              { value: '2', label: 'שני', color: C.accent },
+            ]} />
           </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-          <Input label="Entry" value={form.entry} onChange={v => set('entry', v)} placeholder="1.2850" />
-          <Input label="Stop Loss" value={form.sl} onChange={v => set('sl', v)} placeholder="1.2820" />
-          <Input label="Take Profit" value={form.tp} onChange={v => set('tp', v)} placeholder="1.2910" />
+          <Input label="Entry" value={form.entry} onChange={v => set('entry', v)} placeholder="211.40" />
+          <Input label="Stop Loss" value={form.sl} onChange={v => set('sl', v)} placeholder="211.05" />
+          <Input label="Take Profit" value={form.tp} onChange={v => set('tp', v)} placeholder="212.10" />
         </div>
       </Card>
 
       {/* Emotional state */}
       <Card>
         <SectionTitle>מצב רגשי</SectionTitle>
-        <ScoreSlider
-          label="כמה אתה רגוע עכשיו?"
-          value={form.emotionalState}
+        <ScoreSlider label="כמה אתה רגוע עכשיו?" value={form.emotionalState}
           onChange={v => set('emotionalState', v)}
-          rightLabel="1 — לחוץ מאוד"
-          leftLabel="10 — רגוע לגמרי"
-        />
+          rightLabel="1 — לחוץ מאוד" leftLabel="10 — רגוע לגמרי" />
         {form.emotionalState <= 4 && (
           <div style={{ padding: '11px 14px', background: '#1a0f08', border: `1px solid ${C.warn}44`, borderRadius: 9, color: C.warn, fontSize: 13, marginTop: 4 }}>
             ⚠️ המצב הרגשי שלך נמוך. שקול לחכות לפחות שעה לפני הכניסה.
           </div>
         )}
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
-          <div style={{
-            background: emotionColor + '22', border: `1px solid ${emotionColor}44`,
-            borderRadius: 20, padding: '4px 16px', color: emotionColor, fontSize: 13
-          }}>
-            {form.emotionalState <= 3 ? 'לחוץ / מוטרד' :
-             form.emotionalState <= 5 ? 'ביניים' :
-             form.emotionalState <= 7 ? 'סביר' : 'רגוע ומוכן'}
+          <div style={{ background: emotionColor + '22', border: `1px solid ${emotionColor}44`, borderRadius: 20, padding: '4px 16px', color: emotionColor, fontSize: 13 }}>
+            {form.emotionalState <= 3 ? 'לחוץ / מוטרד' : form.emotionalState <= 5 ? 'ביניים' : form.emotionalState <= 7 ? 'סביר' : 'רגוע ומוכן'}
           </div>
         </div>
       </Card>
@@ -180,16 +165,10 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
         {CHECKLIST.map((item, i) => (
           <Check key={i} label={item} checked={form.checks[i]} onChange={() => toggleCheck(i)} />
         ))}
-
         <div style={{ margin: '16px 0 10px', padding: '14px 16px', background: '#0d1020', border: `1px solid ${C.blue}33`, borderRadius: 10, lineHeight: 1.8, fontStyle: 'italic', color: C.blue, fontSize: 13 }}>
           "אני לא מחפש עסקה שתציל אותי. אני מחפש לבצע נכון. אם העסקה תפסיד — זה חלק מהמשחק. אם העסקה תגיע ל-2R — אני סוגר לפי התוכנית."
         </div>
-        <Check
-          label="קראתי את ההצהרה לפני הכניסה"
-          checked={form.declarationRead}
-          onChange={() => set('declarationRead', !form.declarationRead)}
-        />
-
+        <Check label="קראתי את ההצהרה לפני הכניסה" checked={form.declarationRead} onChange={() => set('declarationRead', !form.declarationRead)} />
         {!allChecked && (
           <div style={{ textAlign: 'center', color: C.red, fontSize: 12, marginTop: 6 }}>
             {!form.declarationRead ? 'יש לקרוא את ההצהרה ולסמן' : `נותרו ${10 - form.checks.filter(Boolean).length} סעיפים`}
@@ -197,13 +176,8 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
         )}
       </Card>
 
-      <Textarea
-        label="הערות לפני כניסה"
-        value={form.notes}
-        onChange={v => set('notes', v)}
-        placeholder="כל מה שאתה רוצה לרשום לפני הכניסה..."
-        rows={3}
-      />
+      <Textarea label="הערות לפני כניסה" value={form.notes} onChange={v => set('notes', v)}
+        placeholder="כל מה שאתה רוצה לרשום לפני הכניסה..." rows={3} />
 
       <Btn onClick={handleSave} disabled={!allChecked || blocked} color={C.green}>
         {isCooldown ? '🚫 עצירת 48 שעות פעילה' : weekStopped ? '🚫 הגעת ל-100 פיפס השבוע' : dayLimit ? '🚫 מקסימום 2 עסקאות היום' : allChecked ? '✓ שמור צ׳קליסט ועבור לעסקה' : 'יש לסמן את כל הסעיפים'}
