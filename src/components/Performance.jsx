@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   LineChart, Line, XAxis, YAxis, CartesianGrid,
-  BarChart, Bar, Legend, RadarChart, Radar, PolarGrid, PolarAngleAxis
+  BarChart, Bar
 } from 'recharts';
 import { C, PIE_COLORS } from '../theme';
 import { Card, SectionTitle, StatBox } from './UI';
