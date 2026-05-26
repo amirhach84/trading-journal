@@ -42,7 +42,8 @@ function CalendarView({ trades, dailyLogs }) {
       const pips = ts.reduce((s, t) => s + (t.pips || 0), 0);
       return pips > 0 ? C.green : pips < 0 ? C.red : C.muted;
     }
-    if (log) return log.disciplineScore >= 7 ? C.blue + '88' : C.muted + '44';
+    // Daily log only — always blue, never red
+    if (log) return C.blue;
     return null;
   };
 
@@ -420,15 +421,17 @@ export default function Performance({ data }) {
                 if (t.result === 'win') byMonth[m].wins++;
               });
               return Object.values(byMonth).reverse().slice(0, 6).map(m => (
-                <div key={m.month} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
-                  <div>
-                    <span style={{ color: C.text, fontSize: 14 }}>{m.month}</span>
-                    <span style={{ color: C.muted, fontSize: 12, marginRight: 8 }}>{m.count} עסקאות</span>
-                    <span style={{ color: C.blue, fontSize: 12 }}>{Math.round((m.wins / m.count) * 100)}% Win</span>
+                <div key={m.month} style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <span style={{ color: C.text, fontSize: 15, fontWeight: 700 }}>{m.month}</span>
+                    <span style={{ color: m.pips >= 0 ? C.green : C.red, fontWeight: 700, fontSize: 20 }}>
+                      {m.pips >= 0 ? '+' : ''}{m.pips.toFixed(0)}p
+                    </span>
                   </div>
-                  <span style={{ color: m.pips >= 0 ? C.green : C.red, fontWeight: 700, fontSize: 16 }}>
-                    {m.pips >= 0 ? '+' : ''}{m.pips.toFixed(0)}p
-                  </span>
+                  <div style={{ display: 'flex', gap: 16 }}>
+                    <span style={{ color: C.muted, fontSize: 13 }}>{m.count} עסקאות</span>
+                    <span style={{ color: C.blue, fontSize: 13, fontWeight: 600 }}>{Math.round((m.wins / m.count) * 100)}% Win</span>
+                  </div>
                 </div>
               ));
             })()}
