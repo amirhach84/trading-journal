@@ -39,7 +39,9 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
 
   const allChecked = form.checks.every(Boolean) && form.declarationRead;
   const dayLimit = (daySetups || 0) >= 2;
-  const blocked = isCooldown || weekStopped || dayLimit;
+
+  // Only cooldown and daily limit block trading — 100 pips is a warning only
+  const blocked = isCooldown || dayLimit;
 
   const handleSave = () => {
     if (!allChecked) { showToast('סמן את כל הסעיפים לפני הכניסה', 'err'); return; }
@@ -58,19 +60,27 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
 
   return (
     <div>
+      {/* Cooldown block */}
       {isCooldown && (
         <Card style={{ background: '#1a0808', borderColor: C.red }}>
           <div style={{ color: C.red, fontWeight: 700, fontSize: 16, marginBottom: 6 }}>🚫 עצירת 48 שעות פעילה</div>
           <div style={{ color: C.text, fontSize: 14 }}>אל תסחר. חזור לטאב החוקים לבדוק מתי מסתיים.</div>
         </Card>
       )}
+
+      {/* 100 pips warning — info only, does NOT block */}
       {!isCooldown && weekStopped && (
-        <Card style={{ background: '#081a08', borderColor: C.green }}>
-          <div style={{ color: C.green, fontWeight: 700, fontSize: 16, marginBottom: 6 }}>✅ הגעת ל-100 פיפס השבוע!</div>
-          <div style={{ color: C.text, fontSize: 14 }}>שבוע המסחר הסתיים. חזור שבוע הבא. כל הכבוד.</div>
+        <Card style={{ background: '#081a08', borderColor: C.green + '66' }}>
+          <div style={{ color: C.green, fontWeight: 700, fontSize: 15, marginBottom: 4 }}>✅ הגעת ל-100 פיפס השבוע</div>
+          <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.6 }}>
+            לפי התוכנית — שבוע המסחר הסתיים. אם אתה בוחר להמשיך, זכור:<br />
+            המטרה היא משמעת, לא ריגוש.
+          </div>
         </Card>
       )}
-      {!isCooldown && !weekStopped && dayLimit && (
+
+      {/* Daily limit block */}
+      {!isCooldown && dayLimit && (
         <Card style={{ background: '#1a120a', borderColor: C.warn }}>
           <div style={{ color: C.warn, fontWeight: 700, fontSize: 16, marginBottom: 6 }}>⚠️ הגעת למקסימום 2 עסקאות להיום</div>
           <div style={{ color: C.text, fontSize: 14 }}>לא ניתן לקחת עסקאות נוספות היום. חזור מחר.</div>
@@ -180,7 +190,10 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
         placeholder="כל מה שאתה רוצה לרשום לפני הכניסה..." rows={3} />
 
       <Btn onClick={handleSave} disabled={!allChecked || blocked} color={C.green}>
-        {isCooldown ? '🚫 עצירת 48 שעות פעילה' : weekStopped ? '🚫 הגעת ל-100 פיפס השבוע' : dayLimit ? '🚫 מקסימום 2 עסקאות היום' : allChecked ? '✓ שמור צ׳קליסט ועבור לעסקה' : 'יש לסמן את כל הסעיפים'}
+        {isCooldown ? '🚫 עצירת 48 שעות פעילה'
+          : dayLimit ? '🚫 מקסימום 2 עסקאות היום'
+          : allChecked ? '✓ שמור צ׳קליסט ועבור לעסקה'
+          : 'יש לסמן את כל הסעיפים'}
       </Btn>
     </div>
   );
