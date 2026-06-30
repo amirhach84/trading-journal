@@ -93,28 +93,32 @@ export default function PostTrade({ data, save, showToast }) {
 
   const handleSave = () => {
     if (!form.pips && form.pips !== 0) { showToast('הזן כמה פיפס', 'err'); return; }
-    const tradeId = selectedOpenId || Date.now();
-    const trade = { ...form, pips: parseFloat(form.pips) || 0, savedAt: new Date().toISOString(), id: tradeId, status: 'closed' };
-
-    let remainingOpen;
-    if (selectedOpenId) {
-      remainingOpen = openTrades.filter(t => t.id !== selectedOpenId);
-    } else if (openTrades.length === 1) {
-      remainingOpen = [];
-    } else {
-      remainingOpen = openTrades;
-    }
-
-    const existingIds = new Set(data.trades.map(t => t.id));
-    const newTrades = existingIds.has(tradeId)
-      ? data.trades.map(t => t.id === tradeId ? trade : t)
-      : [...data.trades, trade];
-
-    let newData = { ...data, trades: newTrades, openTrades: remainingOpen };
+  
+    // Always trust the ORIGINAL open trade's date when one is selected —
+    // never let a stale/default form date overwrite it. This is what makes
+    // multi-day held trades count on their entry day, not their close day.
+    const matchedOpen = selectedOpenId
+      ? openTrades.find(t => t.id === selectedOpenId)
+      : null;
+    const entryDate = matchedOpen ? matchedOpen.date : form.date;
+  
+    const trade = {
+      ...form,
+      date: entryDate, // force entry-date, overriding any drift in form.date
+      pips: parseFloat(form.pips) || 0,
+      savedAt: new Date().toISOString(),
+      id: selectedOpenId || Date.now(),
+      status: 'closed',
+    };
+  
+    const remainingOpen = openTrades.filter(t => t.id !== selectedOpenId);
+    let newData = { ...data, trades: [...data.trades, trade], openTrades: remainingOpen };
+  
     if (form.violatedRule) {
       const cd = new Date(); cd.setHours(cd.getHours() + 48);
       newData.cooldownUntil = cd.toISOString();
     }
+  
     save(newData);
     showToast(form.violatedRule ? '⚠️ חריגה — עצירת 48 שעות הופעלה' : '✓ עסקה נשמרה!', form.violatedRule ? 'err' : 'ok');
     setForm(emptyForm());
