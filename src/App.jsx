@@ -7,14 +7,14 @@ import PostTrade   from './components/PostTrade';
 import Weekly      from './components/Weekly';
 import Performance from './components/Performance';
 import Rules       from './components/Rules';
-import DailyLog    from './components/DailyLog';
+import DisciplineCalendar from './components/DisciplineCalendar';
 import History     from './components/History';
 import AIAnalysis  from './components/AIAnalysis';
 
 const TABS = [
   { id: 'pre',      icon: '📋', label: 'לפני' },
   { id: 'post',     icon: '📝', label: 'אחרי' },
-  { id: 'daily',    icon: '📓', label: 'יומי' },
+  { id: 'daily', icon: '📅', label: 'משמעת' },
   { id: 'week',     icon: '📅', label: 'שבועי' },
   { id: 'perf',     icon: '📊', label: 'ביצועים' },
   { id: 'ai',       icon: '🤖', label: 'AI Coach' },
@@ -161,7 +161,7 @@ export default function App() {
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 16px' }}>
         {tab === 'pre'     && <PreTrade    {...tabProps} isCooldown={isCooldown} weekStopped={weekStopped} weekSetups={weekSetups} daySetups={daySetups} />}
         {tab === 'post'    && <PostTrade   {...tabProps} />}
-        {tab === 'daily'   && <DailyLog    {...tabProps} />}
+        {tab === 'daily' && <DisciplineCalendar {...tabProps} />}
         {tab === 'week'    && <Weekly      {...tabProps} weekTrades={weekTrades} weekPips={weekPips} weekSetups={weekSetups} />}
         {tab === 'perf'    && <Performance {...tabProps} />}
         {tab === 'ai'      && <AIAnalysis  {...tabProps} />}
