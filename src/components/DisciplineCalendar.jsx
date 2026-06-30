@@ -3,6 +3,9 @@ import { C } from '../theme';
 import { Card } from './UI';
 
 const MONTH_NAMES_HE = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+// Grid is rendered in forced LTR (see grid style below) to avoid CSS Grid's RTL auto-mirroring,
+// which was misaligning date cells against day-of-week headers. Headers stay in Sun->Sat order
+// to match JS Date.getDay() (0=Sun..6=Sat) used for empty-cell padding.
 const DAY_NAMES_HE = ['א','ב','ג','ד','ה','ו','ש'];
 
 function dateKey(d) {
@@ -37,16 +40,23 @@ export default function DisciplineCalendar({ data, save, showToast }) {
     return 'broken';
   }
 
-  // Streak: walk back from today, count consecutive days that are 'rest' or 'win'
+  // Streak: walk back from today, counting only actual trading days with discipline (status 'win').
+  // Rest days (0 trades) are skipped over silently — they don't add to the streak, but don't break it either.
+  // A 'broken' day (3+ trades) stops the streak immediately.
   let streak = 0;
   {
     let d = new Date(today);
-    while (true) {
+    let guard = 0;
+    while (guard < 730) {
       const k = dateKey(d);
       const status = dayStatus(k, d);
-      if (status === 'win' || status === 'rest') {
+      if (status === 'win') {
         streak++;
         d.setDate(d.getDate() - 1);
+        guard++;
+      } else if (status === 'rest') {
+        d.setDate(d.getDate() - 1); // skip through, no increment
+        guard++;
       } else break;
     }
   }
@@ -78,15 +88,17 @@ export default function DisciplineCalendar({ data, save, showToast }) {
 
   function saveFeeling(feeling) {
     const key = selectedDay.key;
+    const current = dailyNotes[key]?.feeling;
+    const nextFeeling = current === feeling ? null : feeling; // click again to deselect
     const next = {
       ...data,
       dailyNotes: {
         ...dailyNotes,
-        [key]: { ...(dailyNotes[key] || {}), feeling, note: dailyNotes[key]?.note || '' },
+        [key]: { ...(dailyNotes[key] || {}), feeling: nextFeeling, note: dailyNotes[key]?.note || '' },
       },
     };
     save(next);
-    showToast('✓ נשמר');
+    showToast(nextFeeling ? '✓ נשמר' : '✓ הוסר');
   }
 
   function saveNote() {
@@ -152,8 +164,8 @@ export default function DisciplineCalendar({ data, save, showToast }) {
           <button onClick={prevMonth} style={{ background: C.card, border: `1px solid ${C.border}`, color: C.muted, width: 34, height: 34, borderRadius: 6, cursor: 'pointer', fontSize: 16 }}>←</button>
         </div>
 
-        {/* Calendar grid */}
-        <div style={{ maxWidth: 400, margin: '0 auto' }}>
+        {/* Calendar grid - forced LTR internally so headers/cells never get mirrored by CSS Grid's RTL auto-flip */}
+        <div style={{ maxWidth: 400, margin: '0 auto', direction: 'ltr' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, marginBottom: 3 }}>
             {DAY_NAMES_HE.map(d => (
               <div key={d} style={{ fontFamily: 'monospace', fontSize: 10, color: C.muted, textAlign: 'center', padding: '3px 0' }}>{d}</div>
