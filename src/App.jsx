@@ -14,7 +14,7 @@ import AIAnalysis  from './components/AIAnalysis';
 const TABS = [
   { id: 'pre',      icon: '📋', label: 'לפני' },
   { id: 'post',     icon: '📝', label: 'אחרי' },
-  { id: 'daily', icon: '📅', label: 'משמעת' },
+  { id: 'daily', icon: '🎯', label: 'משמעת' },
   { id: 'week',     icon: '📅', label: 'שבועי' },
   { id: 'perf',     icon: '📊', label: 'ביצועים' },
   { id: 'ai',       icon: '🤖', label: 'AI Coach' },
