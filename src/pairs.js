@@ -27,5 +27,9 @@ export const getPair = (key) => PAIRS[key] || PAIRS.GBPJPY;
 /** מרחק בין שני מחירים, בפיפס */
 export const priceToPips = (a, b, pairKey) => Math.abs(a - b) / getPair(pairKey).pip;
 
+/** שווי פיפ ללוט אחד, או null אם הזוג לא נתמך */
+export const pipValueOf = (pairKey, usdjpy) =>
+  PAIRS[pairKey] ? PAIRS[pairKey].pipValue(usdjpy) : null;
+
 /** שווי פיפ בדולר עבור גודל פוזיציה נתון */
 export const pipValueFor = (pairKey, lots, usdjpy) => getPair(pairKey).pipValue(usdjpy) * lots;
