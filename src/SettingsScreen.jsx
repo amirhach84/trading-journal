@@ -70,8 +70,7 @@ export default function SettingsScreen({
   const sorted = [...events].sort((a, b) => b.date.localeCompare(a.date));
 
   return (
-    <div dir="rtl" style={{ background: C.bg, color: C.text, padding: 14, display: "grid", gap: 12,
-      fontFamily: "system-ui, -apple-system, 'Segoe UI', Arial" }}>
+    <div dir="rtl" style={{ background: "transparent", color: C.text, display: "grid", gap: 12, fontFamily: "inherit" }}>
 
       {/* יתרה */}
       <div style={{ ...card, borderRight: `3px solid ${C.accent}` }}>
