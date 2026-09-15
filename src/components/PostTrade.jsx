@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { C } from '../theme';
 import { Card, SectionTitle, Check, Input, Select, Textarea, ScoreSlider, Btn, SegmentedControl } from './UI';
+import { PAIRS as PAIR_SPECS, pipValueOf } from '../pairs';
+import { computeBalance } from '../accountBalance';
 
 const PAIRS = ['GBPJPY', 'EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'EURJPY', 'אחר'];
 
 const emptyForm = () => ({
   date: new Date().toISOString().slice(0, 10),
+  time: '',
   closeTime: new Date().toTimeString().slice(0, 5),
   pair: 'GBPJPY',
   direction: 'long',
@@ -15,6 +18,8 @@ const emptyForm = () => ({
   tp: '',
   result: 'win',
   pips: '',
+  lots: '',
+  swap: '',
   closedByPlan: true,
   respected2R: true,
   triedHomeRun: false,
@@ -73,17 +78,20 @@ export default function PostTrade({ data, save, showToast }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const openTrades = data.openTrades || [];
+  const settings = data.settings || {};
 
   const selectOpenTrade = (openTrade) => {
     setSelectedOpenId(openTrade.id);
     setForm(f => ({
       ...f,
       date: openTrade.date,
+      time: openTrade.time || '',
       pair: openTrade.pair,
       direction: openTrade.direction,
       entry: openTrade.entry || '',
       sl: openTrade.sl || '',
       tp: openTrade.tp || '',
+      lots: openTrade.lots || f.lots,
       setupNum: openTrade.setupNum || '1',
     }));
   };
@@ -91,9 +99,24 @@ export default function PostTrade({ data, save, showToast }) {
   const avgScore = Math.round((form.disciplineScore + form.patienceScore + form.emotionScore) / 3);
   const avgColor = avgScore >= 7 ? C.green : avgScore >= 5 ? C.warn : C.red;
 
+  // ---- חישובי כסף ----
+  const spec = PAIR_SPECS[form.pair];
+  const pipValue = pipValueOf(form.pair, settings.usdjpy);         // ללוט אחד
+  const lots = parseFloat(form.lots) || 0;
+  const pips = parseFloat(form.pips) || 0;
+  const swap = parseFloat(form.swap) || 0;
+  const commission = lots ? -(lots * (parseFloat(settings.commissionPerLot) || 0)) : 0;
+  const gross = pipValue && lots ? pips * pipValue * lots : null;
+  const net = gross !== null ? gross + commission + swap : null;
+  const slPips = spec && form.entry && form.sl
+    ? Math.abs(parseFloat(form.entry) - parseFloat(form.sl)) / spec.pip
+    : null;
+
+  const money = (v) => (v < 0 ? '−$' : '$') + Math.abs(v).toFixed(2);
+
   const handleSave = () => {
     if (!form.pips && form.pips !== 0) { showToast('הזן כמה פיפס', 'err'); return; }
-  
+
     // Always trust the ORIGINAL open trade's date when one is selected —
     // never let a stale/default form date overwrite it. This is what makes
     // multi-day held trades count on their entry day, not their close day.
@@ -101,24 +124,36 @@ export default function PostTrade({ data, save, showToast }) {
       ? openTrades.find(t => t.id === selectedOpenId)
       : null;
     const entryDate = matchedOpen ? matchedOpen.date : form.date;
-  
+    const entryTime = matchedOpen ? (matchedOpen.time || form.time) : form.time;
+
+    // היתרה לפני העסקה הזו — נשמרת כדי שאחוז הסיכון ההיסטורי לא ישתנה בעתיד
+    const balanceAtEntry = computeBalance(data.accountEvents || [], data.trades, settings).balance;
+
     const trade = {
       ...form,
-      date: entryDate, // force entry-date, overriding any drift in form.date
+      date: entryDate,      // force entry-date, overriding any drift in form.date
+      time: entryTime,      // שעת כניסה — מזינה את פילוח הסשנים
       pips: parseFloat(form.pips) || 0,
+      lots: lots || null,
+      swap,
+      pipValueAtEntry: pipValue,
+      usdjpyAtEntry: spec && spec.needsRate ? (parseFloat(settings.usdjpy) || null) : null,
+      slPips: slPips !== null ? +slPips.toFixed(1) : null,
+      balanceAtEntry: +balanceAtEntry.toFixed(2),
+      heldOvernight: swap !== 0,
       savedAt: new Date().toISOString(),
       id: selectedOpenId || Date.now(),
       status: 'closed',
     };
-  
+
     const remainingOpen = openTrades.filter(t => t.id !== selectedOpenId);
     let newData = { ...data, trades: [...data.trades, trade], openTrades: remainingOpen };
-  
+
     if (form.violatedRule) {
       const cd = new Date(); cd.setHours(cd.getHours() + 48);
       newData.cooldownUntil = cd.toISOString();
     }
-  
+
     save(newData);
     showToast(form.violatedRule ? '⚠️ חריגה — עצירת 48 שעות הופעלה' : '✓ עסקה נשמרה!', form.violatedRule ? 'err' : 'ok');
     setForm(emptyForm());
@@ -166,23 +201,33 @@ export default function PostTrade({ data, save, showToast }) {
         <SectionTitle>תוצאת העסקה</SectionTitle>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, overflow: 'hidden' }}>
           <div style={{ minWidth: 0 }}>
-            <Input label="תאריך סגירה" type="date" value={form.date} onChange={v => set('date', v)} />
+            <Input label="תאריך כניסה" type="date" value={form.date} onChange={v => set('date', v)} />
           </div>
           <div style={{ minWidth: 0 }}>
+            <Input label="שעת כניסה" type="time" value={form.time} onChange={v => set('time', v)} />
+          </div>
+        </div>
+        {!form.time && (
+          <div style={{ color: C.warn, fontSize: 11, marginTop: -8, marginBottom: 12, lineHeight: 1.6 }}>
+            בלי שעת כניסה העסקה לא תיכנס לפילוח לפי סשן בטאב הניתוח.
+          </div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, overflow: 'hidden' }}>
+          <div style={{ minWidth: 0 }}>
             <Input label="שעת סגירה" type="time" value={form.closeTime} onChange={v => set('closeTime', v)} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <Input label="Setup מס׳" value={form.setupNum} onChange={v => set('setupNum', v)} />
           </div>
         </div>
         <Select label="צמד" value={form.pair} onChange={v => set('pair', v)} options={PAIRS} />
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <div>
-            <div style={{ color: C.muted, fontSize: 11, marginBottom: 7, letterSpacing: 0.5 }}>כיוון</div>
-            <SegmentedControl value={form.direction} onChange={v => set('direction', v)} options={[
-              { value: 'long', label: '🟢 Long', color: C.green },
-              { value: 'short', label: '🔴 Short', color: C.red },
-            ]} />
-          </div>
-          <Input label="Setup מס׳" value={form.setupNum} onChange={v => set('setupNum', v)} />
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ color: C.muted, fontSize: 11, marginBottom: 7, letterSpacing: 0.5 }}>כיוון</div>
+          <SegmentedControl value={form.direction} onChange={v => set('direction', v)} options={[
+            { value: 'long', label: '🟢 Long', color: C.green },
+            { value: 'short', label: '🔴 Short', color: C.red },
+          ]} />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
@@ -203,6 +248,48 @@ export default function PostTrade({ data, save, showToast }) {
         <Input label={`פיפס ${form.result === 'loss' ? '(מינוס להפסד)' : ''}`}
           type="number" value={form.pips} onChange={v => set('pips', v)}
           placeholder={form.result === 'loss' ? '-30' : '40'} />
+      </Card>
+
+      {/* Money */}
+      <Card>
+        <SectionTitle>כסף</SectionTitle>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <Input label="גודל פוזיציה (לוט)" type="number" value={form.lots}
+            onChange={v => set('lots', v)} placeholder="0.08" />
+          <Input label="swap ($)" type="number" value={form.swap}
+            onChange={v => set('swap', v)} placeholder="0" />
+        </div>
+        <div style={{ color: C.muted, fontSize: 11, marginTop: -8, marginBottom: 12, lineHeight: 1.7 }}>
+          swap הוא שלילי כשזו עלות, בדיוק כפי שהוא מופיע ב-MT5. ברוב העסקאות השאר 0.
+          {!pipValue && form.pair !== 'אחר' && (
+            <div style={{ color: C.warn, marginTop: 5 }}>
+              {form.pair} לא מוגדר ב-pairs.js — חישובי הכסף לא יעבדו עליו.
+            </div>
+          )}
+        </div>
+
+        {net !== null && (
+          <div style={{ background: C.card2, borderRadius: 10, padding: '12px 14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, textAlign: 'center' }}>
+              {[
+                { l: 'ברוטו', v: money(gross), c: gross >= 0 ? C.green : C.red },
+                { l: 'עמלה', v: money(commission), c: C.muted },
+                { l: 'swap', v: money(swap), c: swap < 0 ? C.warn : C.muted },
+                { l: 'נטו', v: money(net), c: net >= 0 ? C.green : C.red },
+              ].map(x => (
+                <div key={x.l}>
+                  <div style={{ color: C.muted, fontSize: 10, marginBottom: 3 }}>{x.l}</div>
+                  <div style={{ color: x.c, fontSize: 14, fontWeight: 700 }}>{x.v}</div>
+                </div>
+              ))}
+            </div>
+            {slPips !== null && slPips > 0 && (
+              <div style={{ color: C.muted, fontSize: 11, marginTop: 10, textAlign: 'center' }}>
+                סטופ {slPips.toFixed(0)} פיפס · יצא {(pips / slPips).toFixed(2)}R
+              </div>
+            )}
+          </div>
+        )}
       </Card>
 
       {/* Execution */}
