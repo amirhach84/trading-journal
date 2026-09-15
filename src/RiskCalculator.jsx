@@ -50,8 +50,7 @@ export default function RiskCalculator({
   };
 
   return (
-    <div dir="rtl" style={{ background: C.bg, color: C.text, padding: 14, display: "grid", gap: 12,
-      fontFamily: "system-ui, -apple-system, 'Segoe UI', Arial" }}>
+    <div dir="rtl" style={{ background: "transparent", color: C.text, display: "grid", gap: 12, fontFamily: "inherit" }}>
 
       {/* שורת מצב: יתרה קריאה בלבד + סשן */}
       <div style={{ ...card, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px" }}>
