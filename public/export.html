@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ייצוא נתונים</title>
+<style>
+  :root { color-scheme: dark; }
+  body { background:#0a0711; color:#ece8f5; font-family:system-ui,-apple-system,Arial;
+         margin:0; padding:16px; line-height:1.6; }
+  h1 { font-size:19px; margin:0 0 4px; }
+  .sub { color:#8a7ba5; font-size:12px; margin-bottom:18px; }
+  .box { background:#150e20; border:1px solid #2b1f3f; border-radius:12px;
+         padding:14px; margin-bottom:12px; }
+  .key { font-weight:700; font-size:14px; word-break:break-all; }
+  .meta { color:#8a7ba5; font-size:12px; margin-top:3px; }
+  .good { color:#22c55e; font-weight:700; }
+  .warn { color:#f59e0b; font-weight:700; }
+  textarea { width:100%; box-sizing:border-box; height:140px; background:#0a0711;
+             color:#ece8f5; border:1px solid #2b1f3f; border-radius:9px; padding:10px;
+             font-family:ui-monospace,monospace; font-size:11px; margin-top:10px; }
+  button { background:#a855f7; color:#fff; border:none; border-radius:9px;
+           padding:11px 16px; font-size:14px; font-weight:700; cursor:pointer;
+           margin:8px 8px 0 0; font-family:inherit; }
+  button.alt { background:#2b1f3f; }
+  .empty { color:#f43f5e; }
+</style>
+</head>
+<body>
+
+<h1>ייצוא נתונים מקומיים</h1>
+<div class="sub">
+  עמוד קריאה בלבד. הוא לא כותב לשום מקום ולא מדבר עם השרת.
+</div>
+
+<div id="out"></div>
+
+<script>
+(function () {
+  var out = document.getElementById('out');
+
+  function esc(s) {
+    return String(s).replace(/[&<>]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+    });
+  }
+
+  function summarize(raw) {
+    try {
+      var o = JSON.parse(raw);
+      var t = o && o.trades;
+      if (!Array.isArray(t)) return null;
+      var dates = t.map(function (x) { return x && x.date; })
+                   .filter(Boolean).sort();
+      return {
+        count: t.length,
+        first: dates[0] || '?',
+        last: dates[dates.length - 1] || '?',
+        open: (o.openTrades || []).length,
+        logs: (o.dailyLogs || []).length
+      };
+    } catch (e) { return null; }
+  }
+
+  var keys = [];
+  for (var i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i));
+
+  if (!keys.length) {
+    out.innerHTML = '<div class="box empty">' +
+      'ה-localStorage ריק בדפדפן הזה. ודא שאתה באותו דפדפן ובאותה כתובת שבה השתמשת באפליקציה.' +
+      '</div>';
+    return;
+  }
+
+  keys.sort();
+  keys.forEach(function (k, idx) {
+    var raw = localStorage.getItem(k) || '';
+    var s = summarize(raw);
+    var div = document.createElement('div');
+    div.className = 'box';
+
+    var html = '<div class="key">' + esc(k) + '</div>' +
+               '<div class="meta">' + raw.length.toLocaleString() + ' תווים</div>';
+
+    if (s) {
+      html += '<div class="meta"><span class="' +
+              (s.count > 0 ? 'good' : 'warn') + '">' +
+              s.count + ' עסקאות</span> · מ-' + esc(s.first) + ' עד ' + esc(s.last) +
+              ' · ' + s.open + ' פתוחות · ' + s.logs + ' יומני משמעת</div>';
+    }
+
+    html += '<textarea id="ta' + idx + '" readonly></textarea>' +
+            '<button data-i="' + idx + '" data-a="copy">העתק הכל</button>' +
+            '<button class="alt" data-i="' + idx + '" data-a="dl">הורד כקובץ</button>';
+
+    div.innerHTML = html;
+    out.appendChild(div);
+    document.getElementById('ta' + idx).value = raw;
+
+    div.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var ta = document.getElementById('ta' + b.dataset.i);
+        if (b.dataset.a === 'copy') {
+          ta.select();
+          ta.setSelectionRange(0, ta.value.length);
+          var ok = false;
+          try { ok = document.execCommand('copy'); } catch (e) {}
+          if (!ok && navigator.clipboard) {
+            navigator.clipboard.writeText(ta.value).then(function () {
+              b.textContent = 'הועתק ✓';
+            });
+          } else {
+            b.textContent = ok ? 'הועתק ✓' : 'סמן ידנית והעתק';
+          }
+        } else {
+          var blob = new Blob([ta.value], { type: 'application/json' });
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'backup-' + k.replace(/[^a-z0-9]/gi, '_') + '.json';
+          a.click();
+        }
+      });
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
