@@ -104,7 +104,7 @@ export default function AnalysisTab({ trades = DEMO_TRADES, events = DEMO_EVENTS
   };
 
   return (
-    <div dir="rtl" style={{ background: C.bg, color: C.text, minHeight: "100%", padding: 14, fontFamily: "system-ui, -apple-system, 'Segoe UI', Arial", display: "grid", gap: 14 }}>
+    <div dir="rtl" style={{ background: "transparent", color: C.text, display: "grid", gap: 14, fontFamily: "inherit" }}>
 
       {/* מתג תקופה */}
       <div style={{ ...card, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: 10 }}>
