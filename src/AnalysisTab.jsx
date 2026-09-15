@@ -65,8 +65,8 @@ const usd = (v) => (v > 0 ? "+" : "−") + "$" + Math.abs(v).toFixed(0);
 export default function AnalysisTab({ trades = DEMO_TRADES, events = DEMO_EVENTS, theme, settings }) {
   const C = { ...FALLBACK_THEME, ...(theme || {}) };
   SETTINGS = settings || {};
-  const growth = useMemo(() => buildBalanceSeries(events, trades, SETTINGS), [events, trades, settings]);
-  const acct = useMemo(() => computeBalance(events, trades, SETTINGS), [events, trades, settings]);
+  const growth = useMemo(() => buildBalanceSeries(events, trades, settings || {}), [events, trades, settings]);
+  const acct = useMemo(() => computeBalance(events, trades, settings || {}), [events, trades, settings]);
   const [mode, setMode] = useState("month"); // week | month
   const [idx, setIdx] = useState(0);         // 0 = התקופה האחרונה
 
