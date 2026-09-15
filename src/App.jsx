@@ -10,17 +10,29 @@ import Rules       from './components/Rules';
 import DisciplineCalendar from './components/DisciplineCalendar';
 import History     from './components/History';
 import AIAnalysis  from './components/AIAnalysis';
+import AnalysisTab from './AnalysisTab';
+import RiskCalculator from './RiskCalculator';
+import SettingsScreen from './SettingsScreen';
 
 const TABS = [
   { id: 'pre',      icon: '📋', label: 'לפני' },
   { id: 'post',     icon: '📝', label: 'אחרי' },
-  { id: 'daily', icon: '🎯', label: 'משמעת' },
+  { id: 'daily',    icon: '🎯', label: 'משמעת' },
   { id: 'week',     icon: '📅', label: 'שבועי' },
   { id: 'perf',     icon: '📊', label: 'ביצועים' },
+  { id: 'analysis', icon: '📈', label: 'ניתוח' },
   { id: 'ai',       icon: '🤖', label: 'AI Coach' },
   { id: 'history',  icon: '🗂', label: 'היסטוריה' },
   { id: 'rules',    icon: '🚨', label: 'חוקים' },
+  { id: 'settings', icon: '⚙️', label: 'הגדרות' },
 ];
+
+const DEFAULT_SETTINGS = {
+  riskPct: 1,
+  usdjpy: 155,
+  commissionPerLot: 7,
+  defaultPair: 'GBPJPY',
+};
 
 function getWeekStart() {
   const d = new Date();
@@ -55,6 +67,26 @@ export default function App() {
     setTimeout(() => setToast(null), 3200);
   }, []);
 
+  // ---- חשבון והגדרות: נשמרים בתוך אותו data ----
+  const saveSettings = useCallback((s) => {
+    save({ ...data, settings: s });
+  }, [data, save]);
+
+  const addEvent = useCallback((ev) => {
+    const events = [...(data.accountEvents || []), { ...ev, id: ev.id || Date.now() }];
+    save({ ...data, accountEvents: events });
+    showToast('נרשם בחשבון');
+  }, [data, save, showToast]);
+
+  const deleteEvent = useCallback((id) => {
+    save({ ...data, accountEvents: (data.accountEvents || []).filter(e => e.id !== id) });
+  }, [data, save]);
+
+  const applyRisk = useCallback((payload) => {
+    save({ ...data, pendingTrade: payload });
+    showToast(`${payload.lots} לוט · סיכון $${payload.riskUsd}`);
+  }, [data, save, showToast]);
+
   if (!data) {
     return (
       <div style={{ background: C.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent, fontSize: 20, fontFamily: 'serif', direction: 'rtl' }}>
@@ -62,6 +94,9 @@ export default function App() {
       </div>
     );
   }
+
+  const events = data.accountEvents || [];
+  const settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
 
   // Computed stats
   const weekStart = getWeekStart();
@@ -159,14 +194,41 @@ export default function App() {
 
       {/* Content */}
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 16px' }}>
-        {tab === 'pre'     && <PreTrade    {...tabProps} isCooldown={isCooldown} weekStopped={weekStopped} weekSetups={weekSetups} daySetups={daySetups} />}
+        {tab === 'pre' && (
+          <>
+            <RiskCalculator
+              theme={C}
+              trades={data.trades}
+              events={events}
+              settings={settings}
+              onOpenSettings={() => setTab('settings')}
+              onApply={applyRisk}
+            />
+            <div style={{ height: 20 }} />
+            <PreTrade {...tabProps} isCooldown={isCooldown} weekStopped={weekStopped} weekSetups={weekSetups} daySetups={daySetups} />
+          </>
+        )}
         {tab === 'post'    && <PostTrade   {...tabProps} />}
-        {tab === 'daily' && <DisciplineCalendar {...tabProps} />}
+        {tab === 'daily'   && <DisciplineCalendar {...tabProps} />}
         {tab === 'week'    && <Weekly      {...tabProps} weekTrades={weekTrades} weekPips={weekPips} weekSetups={weekSetups} />}
         {tab === 'perf'    && <Performance {...tabProps} />}
+        {tab === 'analysis' && (
+          <AnalysisTab theme={C} trades={data.trades} events={events} settings={settings} />
+        )}
         {tab === 'ai'      && <AIAnalysis  {...tabProps} />}
         {tab === 'history' && <History     {...tabProps} />}
         {tab === 'rules'   && <Rules       {...tabProps} />}
+        {tab === 'settings' && (
+          <SettingsScreen
+            theme={C}
+            trades={data.trades}
+            events={events}
+            settings={settings}
+            onSettingsChange={saveSettings}
+            onAddEvent={addEvent}
+            onDeleteEvent={deleteEvent}
+          />
+        )}
       </div>
     </div>
   );
