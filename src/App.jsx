@@ -115,8 +115,9 @@ export default function App() {
   const wins = data.trades.filter(t => t.result === 'win').length;
   const winRate = totalTrades > 0 ? Math.round((wins / totalTrades) * 100) : 0;
   const allPips = data.trades.reduce((s, t) => s + (t.pips || 0), 0);
-  const avgDisc = totalTrades > 0
-    ? (data.trades.reduce((s, t) => s + (t.disciplineScore || 0), 0) / totalTrades).toFixed(1)
+  const scored = data.trades.filter(t => typeof t.disciplineScore === 'number');
+  const avgDisc = scored.length > 0
+    ? (scored.reduce((s, t) => s + t.disciplineScore, 0) / scored.length).toFixed(1)
     : '—';
 
   // Daily streak
@@ -227,6 +228,9 @@ export default function App() {
             onSettingsChange={saveSettings}
             onAddEvent={addEvent}
             onDeleteEvent={deleteEvent}
+            data={data}
+            save={save}
+            showToast={showToast}
           />
         )}
       </div>
