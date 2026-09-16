@@ -26,7 +26,7 @@ export default function RiskCalculator({
   const C = { ...FALLBACK_THEME, ...(theme || {}) };
   const cfg = { riskPct: 1, usdjpy: 155, defaultPair: "GBPJPY", ...(settings || {}) };
 
-  const { balance } = useMemo(() => computeBalance(events, trades), [events, trades]);
+  const { balance } = useMemo(() => computeBalance(events, trades, cfg), [events, trades, cfg]);
 
   const [pairKey, setPairKey] = useState(cfg.defaultPair);
   const [entry, setEntry] = useState("");
