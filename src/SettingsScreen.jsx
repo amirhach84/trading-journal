@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { PAIR_LIST } from "./pairs";
 import { EVENT_TYPES, computeBalance, returnOnCapital, costReport, reconcile } from "./accountBalance";
+import BackupPanel from "./BackupPanel";
 
 /* ------------------------------------------------------------------
    SettingsScreen — המקור היחיד לאמת על החשבון.
@@ -25,6 +26,7 @@ const money2 = (v) => (v < 0 ? "−$" : "$") + Math.abs(v).toFixed(2);
 export default function SettingsScreen({
   theme, trades = [], events: extEvents, settings: extSettings,
   onSettingsChange, onAddEvent, onDeleteEvent,
+  data, save, showToast,
 }) {
   const C = { ...FALLBACK_THEME, ...(theme || {}) };
 
@@ -248,6 +250,11 @@ export default function SettingsScreen({
           </div>
         )}
       </div>
+
+      {/* גיבוי ושחזור */}
+      {data && save && (
+        <BackupPanel theme={C} data={data} save={save} showToast={showToast || (() => {})} />
+      )}
     </div>
   );
 }
