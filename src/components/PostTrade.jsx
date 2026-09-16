@@ -20,6 +20,7 @@ const emptyForm = () => ({
   pips: '',
   lots: '',
   swap: '',
+  grossUsd: '',
   closedByPlan: true,
   respected2R: true,
   triedHomeRun: false,
@@ -106,7 +107,10 @@ export default function PostTrade({ data, save, showToast }) {
   const pips = parseFloat(form.pips) || 0;
   const swap = parseFloat(form.swap) || 0;
   const commission = lots ? -(lots * (parseFloat(settings.commissionPerLot) || 0)) : 0;
-  const gross = pipValue && lots ? pips * pipValue * lots : null;
+  const grossTyped = form.grossUsd !== '' && !isNaN(parseFloat(form.grossUsd))
+    ? parseFloat(form.grossUsd) : null;
+  const grossCalc = pipValue && lots ? pips * pipValue * lots : null;
+  const gross = grossTyped !== null ? grossTyped : grossCalc;
   const net = gross !== null ? gross + commission + swap : null;
   const slPips = spec && form.entry && form.sl
     ? Math.abs(parseFloat(form.entry) - parseFloat(form.sl)) / spec.pip
@@ -136,6 +140,8 @@ export default function PostTrade({ data, save, showToast }) {
       pips: parseFloat(form.pips) || 0,
       lots: lots || null,
       swap,
+      grossUsd: gross !== null ? +gross.toFixed(2) : null,
+      grossFromBroker: grossTyped !== null,
       pipValueAtEntry: pipValue,
       usdjpyAtEntry: spec && spec.needsRate ? (parseFloat(settings.usdjpy) || null) : null,
       slPips: slPips !== null ? +slPips.toFixed(1) : null,
@@ -259,7 +265,18 @@ export default function PostTrade({ data, save, showToast }) {
           <Input label="swap ($)" type="number" value={form.swap}
             onChange={v => set('swap', v)} placeholder="0" />
         </div>
-        <div style={{ color: C.muted, fontSize: 11, marginTop: -8, marginBottom: 12, lineHeight: 1.7 }}>
+        <div style={{ marginBottom: 14 }}>
+          <Input label="רווח מ-MT5 ($) — לא חובה" type="number" value={form.grossUsd}
+            onChange={v => set('grossUsd', v)}
+            placeholder={grossCalc !== null ? grossCalc.toFixed(2) : '28.15'} />
+          <div style={{ color: C.muted, fontSize: 11, marginTop: -8, lineHeight: 1.7 }}>
+            {grossTyped !== null
+              ? 'משתמש במספר מ-MT5. הפיפס לא משפיעים על חישוב הכסף.'
+              : 'אם תשאיר ריק, הברוטו יחושב מהפיפס לפי שער USDJPY שבהגדרות — מדויק בערך עד כמה סנטים. הזנת המספר מ-MT5 מדויקת לחלוטין.'}
+          </div>
+        </div>
+
+        <div style={{ color: C.muted, fontSize: 11, marginTop: -4, marginBottom: 12, lineHeight: 1.7 }}>
           swap הוא שלילי כשזו עלות, בדיוק כפי שהוא מופיע ב-MT5. ברוב העסקאות השאר 0.
           {!pipValue && form.pair !== 'אחר' && (
             <div style={{ color: C.warn, marginTop: 5 }}>
@@ -286,6 +303,9 @@ export default function PostTrade({ data, save, showToast }) {
             {slPips !== null && slPips > 0 && (
               <div style={{ color: C.muted, fontSize: 11, marginTop: 10, textAlign: 'center' }}>
                 סטופ {slPips.toFixed(0)} פיפס · יצא {(pips / slPips).toFixed(2)}R
+                {grossTyped !== null && grossCalc !== null &&
+                  Math.abs(grossTyped - grossCalc) >= 0.01 &&
+                  ` · פער מהחישוב לפי פיפס: ${money(grossTyped - grossCalc)}`}
               </div>
             )}
           </div>
