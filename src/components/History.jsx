@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { C } from '../theme';
 import { Card, SectionTitle, Input, Textarea, ScoreSlider, SegmentedControl } from './UI';
+import { rContext, fmtR } from '../rMultiple';
+import LossReasonPicker from './LossReasonPicker';
+import { reasonById } from '../lossReasons';
 
 // ── Edit Trade Modal ──────────────────────────────────────────
 function EditTradeModal({ trade, onSave, onDelete, onClose }) {
@@ -38,7 +41,16 @@ function EditTradeModal({ trade, onSave, onDelete, onClose }) {
               { value: 'be', label: '⚪ BE', color: C.muted },
             ]} />
           </div>
-          <Input label="פיפס" type="number" value={String(form.pips)} onChange={v => set('pips', parseFloat(v) || 0)} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Input label="פיפס" type="number" value={String(form.pips)} onChange={v => set('pips', parseFloat(v) || 0)} />
+            <Input label="מרחק סטופ (פיפס)" type="number" value={String(form.slPips ?? '')}
+              onChange={v => set('slPips', v === '' ? null : parseFloat(v))} placeholder="להשלמת R מדויק" />
+          </div>
+          {(form.result === 'loss' || (parseFloat(form.pips) || 0) < 0) && (
+            <div style={{ marginBottom: 14 }}>
+              <LossReasonPicker value={form.lossReason} onChange={v => set('lossReason', v)} compact />
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <div style={{ color: C.muted, fontSize: 11, marginBottom: 7 }}>כיוון</div>
@@ -195,6 +207,8 @@ export default function History({ data, save, showToast }) {
   const [editingType, setEditingType] = useState(null);
 
   const trades = data.trades || [];
+
+  const R = rContext(data.trades || []);
   const dailyLogs = data.dailyLogs || [];
 
   const allEntries = [
@@ -301,7 +315,7 @@ export default function History({ data, save, showToast }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 16 }}>
           {[
             { label: 'עסקאות', value: trades.length, color: C.text },
-            { label: 'סה״כ פיפס', value: `${trades.reduce((s, t) => s + (t.pips || 0), 0).toFixed(0)}p`, color: trades.reduce((s, t) => s + (t.pips || 0), 0) >= 0 ? C.green : C.red },
+            { label: 'סה״כ R', value: fmtR(R.sum(trades), 1, R.estimatedCount(trades) > 0), color: R.sum(trades) >= 0 ? C.green : C.red },
             { label: 'Win Rate', value: `${trades.length ? Math.round((trades.filter(t => t.result === 'win').length / trades.length) * 100) : 0}%`, color: C.blue },
           ].map(s => (
             <div key={s.label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 8px', textAlign: 'center' }}>
@@ -355,9 +369,22 @@ export default function History({ data, save, showToast }) {
                       )}
                     </div>
                     <div style={{ textAlign: 'left', marginRight: 12 }}>
-                      <div style={{ color: entry.pips > 0 ? C.green : entry.pips < 0 ? C.red : C.muted, fontSize: 22, fontWeight: 700 }}>
+                      <div style={{ color: R.value(entry) > 0 ? C.green : R.value(entry) < 0 ? C.red : C.muted, fontSize: 20, fontWeight: 700 }}>
+                        {R.fmt(entry)}
+                      </div>
+                      <div style={{ color: C.muted, fontSize: 10, textAlign: 'center' }}>
                         {entry.pips > 0 ? '+' : ''}{entry.pips}p
                       </div>
+                      {entry.lossReason && (() => {
+                        const r = reasonById(entry.lossReason);
+                        return r ? (
+                          <div style={{ marginTop: 4, fontSize: 9, padding: '2px 6px', borderRadius: 5,
+                            color: r.error ? C.red : C.green,
+                            background: (r.error ? C.red : C.green) + '18', whiteSpace: 'nowrap' }}>
+                            {r.short}
+                          </div>
+                        ) : null;
+                      })()}
                       <div style={{ color: C.muted, fontSize: 10, textAlign: 'center' }}>
                         {entry.result === 'win' ? '🟢' : entry.result === 'loss' ? '🔴' : '⚪'}
                       </div>

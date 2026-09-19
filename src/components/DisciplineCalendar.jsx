@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { C } from '../theme';
 import { Card } from './UI';
+import { rContext, fmtR, weekStatus } from '../rMultiple';
 
 const MONTH_NAMES_HE = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 // Grid is rendered in forced LTR (see grid style below) to avoid CSS Grid's RTL auto-mirroring,
@@ -22,7 +23,14 @@ export default function DisciplineCalendar({ data, save, showToast }) {
   const [noteDraft, setNoteDraft] = useState('');
 
   const trades = data.trades || [];
-  const dailyNotes = data.dailyNotes || {}; // { '2026-06-30': { feeling, note } }
+  const R = rContext(trades);
+  const wk = weekStatus(data, data.settings);
+  const dailyNotes = data.dailyNotes || {};
+
+  function rForDay(key) {
+    const list = trades.filter(t => t.date === key);
+    return { sum: list.reduce((s, t) => s + R.value(t), 0), est: list.some(t => R.of(t).estimated), n: list.length };
+  } // { '2026-06-30': { feeling, note } }
 
   // Count trades per day
   function tradesForDay(key) {
@@ -139,6 +147,25 @@ export default function DisciplineCalendar({ data, save, showToast }) {
           </div>
         </div>
 
+        {/* Weekly rules */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 14 }}>
+          {[
+            { v: `${wk.used}/${wk.maxTrades}`, l: 'עסקאות השבוע', c: wk.used >= wk.maxTrades ? C.red : wk.used === wk.maxTrades - 1 ? C.warn : C.green },
+            { v: `${wk.losses}/${wk.maxLosses}`, l: 'הפסדים השבוע', c: wk.losses >= wk.maxLosses ? C.red : wk.losses === wk.maxLosses - 1 ? C.warn : C.text },
+            { v: fmtR(wk.totalR, 1, wk.estimated > 0), l: 'R השבוע', c: wk.totalR >= 0 ? C.green : C.red },
+          ].map(x => (
+            <div key={x.l} style={{ background: C.card2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 4px', textAlign: 'center' }}>
+              <div style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 700, color: x.c }}>{x.v}</div>
+              <div style={{ fontFamily: 'monospace', fontSize: 9, color: C.muted, marginTop: 2 }}>{x.l}</div>
+            </div>
+          ))}
+        </div>
+        {wk.stopped && (
+          <div style={{ background: C.red + '14', border: `1px solid ${C.red}44`, borderRadius: 9, padding: '10px 12px', marginBottom: 14, color: C.red, fontSize: 12.5, textAlign: 'center', lineHeight: 1.6 }}>
+            🚫 {wk.reasons.join(' · ')}
+          </div>
+        )}
+
         {/* Stats */}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 20 }}>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 18px', textAlign: 'center' }}>
@@ -198,7 +225,17 @@ export default function DisciplineCalendar({ data, save, showToast }) {
                   }}
                 >
                   <span style={{ fontFamily: 'monospace', fontSize: 10, color: status === 'win' || status === 'broken' ? C.text : C.muted, lineHeight: 1, marginBottom: 2 }}>{day}</span>
-                  <span style={{ fontSize: 12, lineHeight: 1 }}>{statusMark[status]}</span>
+                  <span style={{ fontSize: 11, lineHeight: 1 }}>{statusMark[status]}</span>
+                  {(() => {
+                    const d = rForDay(key);
+                    if (!d.n) return null;
+                    return (
+                      <span style={{ fontSize: 8, lineHeight: 1, marginTop: 1, fontFamily: 'monospace',
+                        color: d.sum > 0 ? C.green : d.sum < 0 ? C.red : C.muted }}>
+                        {fmtR(d.sum, 1, d.est)}
+                      </span>
+                    );
+                  })()}
                   {hasFeeling && (
                     <span style={{ position: 'absolute', top: 2, left: 2, fontSize: 8 }}>📝</span>
                   )}
@@ -234,6 +271,10 @@ export default function DisciplineCalendar({ data, save, showToast }) {
             </div>
             <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>
               {tradesForDay(selectedDay.key)} עסקאות באותו יום
+              {tradesForDay(selectedDay.key) > 0 && (() => {
+                const d = rForDay(selectedDay.key);
+                return <span style={{ color: d.sum >= 0 ? C.green : C.red, fontWeight: 700 }}> · {fmtR(d.sum, 2, d.est)}</span>;
+              })()}
               {tradesForDay(selectedDay.key) > 2 && <span style={{ color: C.red }}> — הכלל הופר</span>}
               {tradesForDay(selectedDay.key) === 0 && <span> — יום מנוחה</span>}
             </div>

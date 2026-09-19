@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { C, PIE_COLORS } from '../theme';
 import { Card, SectionTitle, StatBox } from './UI';
+import { rContext, fmtR } from '../rMultiple';
 
 const TT = { background: '#111118', border: `1px solid #1e1e2e`, borderRadius: 8, color: '#e8e0d0', fontSize: 12 };
 
@@ -17,7 +18,7 @@ function getWeekKey(dateStr) {
 }
 
 // ── Calendar view ─────────────────────────────────────────────
-function CalendarView({ trades, dailyLogs }) {
+function CalendarView({ trades, dailyLogs, R }) {
   const [viewDate, setViewDate] = useState(new Date());
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -39,8 +40,8 @@ function CalendarView({ trades, dailyLogs }) {
     const ts = tradesByDate[dateStr] || [];
     const log = logsByDate[dateStr];
     if (ts.length > 0) {
-      const pips = ts.reduce((s, t) => s + (t.pips || 0), 0);
-      return pips > 0 ? C.green : pips < 0 ? C.red : C.muted;
+      const r = ts.reduce((s, t) => s + R.value(t), 0);
+      return r > 0 ? C.green : r < 0 ? C.red : C.muted;
     }
     // Daily log only — always blue, never red
     if (log) return C.blue;
@@ -76,7 +77,8 @@ function CalendarView({ trades, dailyLogs }) {
           const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
           const color = getDayColor(dateStr);
           const ts = tradesByDate[dateStr] || [];
-          const pips = ts.reduce((s, t) => s + (t.pips || 0), 0);
+          const rSum = ts.reduce((s, t) => s + R.value(t), 0);
+          const rEst = ts.some(t => R.of(t).estimated);
           const isToday = dateStr === new Date().toISOString().slice(0, 10);
 
           return (
@@ -89,8 +91,8 @@ function CalendarView({ trades, dailyLogs }) {
             }}>
               <div style={{ color: isToday ? C.accent : C.text, fontSize: 12, fontWeight: isToday ? 700 : 400 }}>{day}</div>
               {ts.length > 0 && (
-                <div style={{ color: pips > 0 ? C.green : C.red, fontSize: 9, fontWeight: 600 }}>
-                  {pips > 0 ? '+' : ''}{pips.toFixed(0)}p
+                <div style={{ color: rSum > 0 ? C.green : C.red, fontSize: 9, fontWeight: 600 }}>
+                  {fmtR(rSum, 1, rEst)}
                 </div>
               )}
             </div>
@@ -111,7 +113,7 @@ function CalendarView({ trades, dailyLogs }) {
 }
 
 // ── Revenge trading detector ──────────────────────────────────
-function RevengeDetector({ trades }) {
+function RevengeDetector({ trades, R }) {
   const sorted = [...trades].sort((a, b) => new Date(a.savedAt) - new Date(b.savedAt));
   const revengeList = [];
 
@@ -150,13 +152,13 @@ function RevengeDetector({ trades }) {
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <span style={{ color: C.warn, fontSize: 12 }}>{r.minutesAfter} דקות אחרי הפסד</span>
-              <span style={{ color: r.trade.pips > 0 ? C.green : C.red, fontWeight: 700 }}>
-                {r.trade.pips > 0 ? '+' : ''}{r.trade.pips}p
+              <span style={{ color: R.value(r.trade) > 0 ? C.green : C.red, fontWeight: 700 }}>
+                {R.fmt(r.trade)}
               </span>
             </div>
           </div>
           <div style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>
-            קדם לה הפסד של {r.prevLoss.pips}p ב-{r.prevLoss.pair}
+            קדם לה הפסד של {R.fmt(r.prevLoss)} ב-{r.prevLoss.pair}
           </div>
         </div>
       ))}
@@ -184,28 +186,24 @@ export default function Performance({ data }) {
   const wins = trades.filter(t => t.result === 'win').length;
   const losses = trades.filter(t => t.result === 'loss').length;
   const bes = trades.filter(t => t.result === 'be').length;
-  const allPips = trades.reduce((s, t) => s + (t.pips || 0), 0);
+  const R = rContext(trades);
+  const estCount = R.estimatedCount(trades);
+  const totalR = R.sum(trades);
   const winRate = ((wins / total) * 100).toFixed(0);
-  const avgDisc = (trades.reduce((s, t) => s + (t.disciplineScore || 0), 0) / total).toFixed(1);
+  const scored = trades.filter(t => typeof t.disciplineScore === 'number');
+  const avgDisc = scored.length
+    ? (scored.reduce((s, t) => s + t.disciplineScore, 0) / scored.length).toFixed(1) : '—';
 
-  const winPips = trades.filter(t => t.pips > 0).reduce((s, t) => s + t.pips, 0);
-  const lossPips = Math.abs(trades.filter(t => t.pips < 0).reduce((s, t) => s + t.pips, 0));
-  const avgWin = wins > 0 ? (winPips / wins).toFixed(1) : 0;
-  const avgLoss = losses > 0 ? (lossPips / losses).toFixed(1) : 0;
-  const profitFactor = lossPips > 0 ? (winPips / lossPips).toFixed(2) : '∞';
-  const rrRatio = avgLoss > 0 ? (avgWin / avgLoss).toFixed(2) : '∞';
+  const winR = trades.filter(t => R.value(t) > 0).reduce((s, t) => s + R.value(t), 0);
+  const lossR = Math.abs(trades.filter(t => R.value(t) < 0).reduce((s, t) => s + R.value(t), 0));
+  const avgWin = wins > 0 ? (winR / wins).toFixed(2) : '0.00';
+  const avgLoss = losses > 0 ? (lossR / losses).toFixed(2) : '0.00';
+  const profitFactor = lossR > 0 ? (winR / lossR).toFixed(2) : '∞';
+  const rrRatio = parseFloat(avgLoss) > 0 ? (avgWin / avgLoss).toFixed(2) : '∞';
+  const expectancy = total > 0 ? (totalR / total).toFixed(2) : '0.00';
 
   // ── R-Multiple ────────────────────────────────────────────
-  const rMultiples = [];
-  trades.forEach(t => {
-    if (t.sl && t.entry && t.pips !== undefined) {
-      const slPips = Math.abs(parseFloat(t.entry) - parseFloat(t.sl)) * 100;
-      if (slPips > 0) {
-        const r = parseFloat((t.pips / slPips).toFixed(2));
-        rMultiples.push(r);
-      }
-    }
-  });
+  const rMultiples = trades.map(t => parseFloat(R.value(t).toFixed(2)));
   const rBuckets = { '-2R+': 0, '-1R': 0, '0R': 0, '1R': 0, '2R': 0, '3R+': 0 };
   rMultiples.forEach(r => {
     if (r <= -2) rBuckets['-2R+']++;
@@ -223,53 +221,53 @@ export default function Performance({ data }) {
   trades.forEach(t => {
     if (!t.time) return;
     const hour = t.time.slice(0, 2);
-    if (!byHour[hour]) byHour[hour] = { hour, pips: 0, count: 0, wins: 0 };
-    byHour[hour].pips += t.pips || 0;
+    if (!byHour[hour]) byHour[hour] = { hour, r: 0, count: 0, wins: 0 };
+    byHour[hour].r += R.value(t);
     byHour[hour].count++;
     if (t.result === 'win') byHour[hour].wins++;
   });
   const hourChart = Object.values(byHour).sort((a, b) => a.hour.localeCompare(b.hour)).map(h => ({
     hour: `${h.hour}:00`,
-    פיפס: parseFloat(h.pips.toFixed(1)),
+    R: parseFloat(h.r.toFixed(2)),
     winRate: h.count > 0 ? Math.round((h.wins / h.count) * 100) : 0,
     עסקאות: h.count,
   }));
 
   // ── By Day of Week ────────────────────────────────────────
   const DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
-  const byDay = DAY_NAMES.map((name, i) => ({ name, pips: 0, count: 0, wins: 0, day: i }));
+  const byDay = DAY_NAMES.map((name, i) => ({ name, r: 0, count: 0, wins: 0, day: i }));
   trades.forEach(t => {
     const d = new Date(t.date).getDay();
-    byDay[d].pips += t.pips || 0;
+    byDay[d].r += R.value(t);
     byDay[d].count++;
     if (t.result === 'win') byDay[d].wins++;
   });
   const dayChart = byDay.filter(d => d.count > 0).map(d => ({
     name: d.name,
-    פיפס: parseFloat(d.pips.toFixed(1)),
+    R: parseFloat(d.r.toFixed(2)),
     winRate: Math.round((d.wins / d.count) * 100),
     עסקאות: d.count,
   }));
 
   // ── Cumulative & Weekly ───────────────────────────────────
   let cum = 0;
-  const pipsLine = trades.map((t, i) => {
-    cum += t.pips || 0;
-    return { name: `#${i + 1}`, cumPips: parseFloat(cum.toFixed(1)), pips: t.pips || 0 };
+  const rLine = trades.map((t, i) => {
+    cum += R.value(t);
+    return { name: `#${i + 1}`, cumR: parseFloat(cum.toFixed(2)) };
   }).slice(-30);
 
   const byWeek = {};
   trades.forEach(t => {
     const wk = getWeekKey(t.date);
-    if (!byWeek[wk]) byWeek[wk] = { week: wk, pips: 0, disc: [], wins: 0, count: 0 };
-    byWeek[wk].pips += t.pips || 0;
+    if (!byWeek[wk]) byWeek[wk] = { week: wk, r: 0, disc: [], wins: 0, count: 0 };
+    byWeek[wk].r += R.value(t);
     byWeek[wk].disc.push(t.disciplineScore || 0);
     byWeek[wk].count++;
     if (t.result === 'win') byWeek[wk].wins++;
   });
   const weeklyChart = Object.values(byWeek).slice(-10).map(w => ({
     week: w.week.slice(5),
-    פיפס: parseFloat(w.pips.toFixed(1)),
+    R: parseFloat(w.r.toFixed(2)),
     משמעת: w.disc.length ? parseFloat((w.disc.reduce((a, b) => a + b, 0) / w.disc.length).toFixed(1)) : 0,
   }));
 
@@ -307,22 +305,29 @@ export default function Performance({ data }) {
       {activeSection === 'overview' && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 16 }}>
-            <StatBox label="סה״כ פיפס" value={allPips >= 0 ? '+' + allPips.toFixed(0) : allPips.toFixed(0)} color={allPips >= 0 ? C.green : C.red} />
+            <StatBox label="סה״כ R" value={fmtR(totalR, 1, estCount > 0)} color={totalR >= 0 ? C.green : C.red} />
+            <StatBox label="תוחלת לעסקה" value={fmtR(parseFloat(expectancy))} color={parseFloat(expectancy) >= 0 ? C.green : C.red} />
             <StatBox label="Win Rate" value={`${winRate}%`} color={C.blue} />
-            <StatBox label="ממוצע משמעת" value={`${avgDisc}/10`} color={C.accent} />
-            <StatBox label="סה״כ עסקאות" value={total} color={C.text} />
+            <StatBox label="סה״כ עסקאות" value={total} sub={`משמעת ${avgDisc}/10`} color={C.text} />
           </div>
+
+          {estCount > 0 && (
+            <div style={{ color: C.muted, fontSize: 11, textAlign: 'center', marginTop: -6, marginBottom: 14, lineHeight: 1.6 }}>
+              ל-{estCount} מתוך {total} עסקאות אין SL שמור — ה-R שלהן מוערך לפי חציון סטופ
+              של {R.fallbackSl.toFixed(0)} פיפס ומסומן ב-~
+            </div>
+          )}
 
           {/* Profit factor & RR */}
           <Card>
             <SectionTitle>יחס רווח / הפסד</SectionTitle>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 14 }}>
               <div style={{ background: C.card2, borderRadius: 9, padding: '12px', textAlign: 'center' }}>
-                <div style={{ color: C.green, fontSize: 22, fontWeight: 700 }}>{avgWin}p</div>
+                <div style={{ color: C.green, fontSize: 22, fontWeight: 700 }}>+{avgWin}R</div>
                 <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>ממוצע רווח</div>
               </div>
               <div style={{ background: C.card2, borderRadius: 9, padding: '12px', textAlign: 'center' }}>
-                <div style={{ color: C.red, fontSize: 22, fontWeight: 700 }}>{avgLoss}p</div>
+                <div style={{ color: C.red, fontSize: 22, fontWeight: 700 }}>−{avgLoss}R</div>
                 <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>ממוצע הפסד</div>
               </div>
               <div style={{ background: C.card2, borderRadius: 9, padding: '12px', textAlign: 'center' }}>
@@ -365,17 +370,17 @@ export default function Performance({ data }) {
           )}
 
           {/* Cumulative pips */}
-          {pipsLine.length > 1 && (
+          {rLine.length > 1 && (
             <Card>
-              <SectionTitle>פיפס מצטבר</SectionTitle>
+              <SectionTitle>R מצטבר</SectionTitle>
               <div style={{ height: 180 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={pipsLine} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                  <LineChart data={rLine} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
                     <XAxis dataKey="name" tick={{ fill: C.muted, fontSize: 10 }} />
                     <YAxis tick={{ fill: C.muted, fontSize: 10 }} />
                     <Tooltip contentStyle={TT} />
-                    <Line type="monotone" dataKey="cumPips" stroke={C.accent} strokeWidth={2.5} dot={{ r: 3 }} name="פיפס מצטבר" />
+                    <Line type="monotone" dataKey="cumR" stroke={C.accent} strokeWidth={2.5} dot={{ r: 3 }} name="R מצטבר" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -385,7 +390,7 @@ export default function Performance({ data }) {
           {/* Weekly */}
           {weeklyChart.length > 1 && (
             <Card>
-              <SectionTitle>פיפס שבועי</SectionTitle>
+              <SectionTitle>R שבועי</SectionTitle>
               <div style={{ height: 180 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={weeklyChart} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
@@ -393,8 +398,8 @@ export default function Performance({ data }) {
                     <XAxis dataKey="week" tick={{ fill: C.muted, fontSize: 10 }} />
                     <YAxis tick={{ fill: C.muted, fontSize: 10 }} />
                     <Tooltip contentStyle={TT} />
-                    <Bar dataKey="פיפס" radius={[5, 5, 0, 0]}>
-                      {weeklyChart.map((e, i) => <Cell key={i} fill={e.פיפס >= 0 ? C.accent : C.red} />)}
+                    <Bar dataKey="R" radius={[5, 5, 0, 0]}>
+                      {weeklyChart.map((e, i) => <Cell key={i} fill={e.R >= 0 ? C.accent : C.red} />)}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -407,7 +412,7 @@ export default function Performance({ data }) {
       {/* ── CALENDAR ── */}
       {activeSection === 'calendar' && (
         <>
-          <CalendarView trades={trades} dailyLogs={dailyLogs} />
+          <CalendarView trades={trades} dailyLogs={dailyLogs} R={R} />
           {/* Monthly summary */}
           <Card>
             <SectionTitle>סיכום חודשי</SectionTitle>
@@ -415,8 +420,9 @@ export default function Performance({ data }) {
               const byMonth = {};
               trades.forEach(t => {
                 const m = t.date.slice(0, 7);
-                if (!byMonth[m]) byMonth[m] = { month: m, pips: 0, count: 0, wins: 0 };
-                byMonth[m].pips += t.pips || 0;
+                if (!byMonth[m]) byMonth[m] = { month: m, r: 0, count: 0, wins: 0, est: 0 };
+                byMonth[m].r += R.value(t);
+                if (R.of(t).estimated) byMonth[m].est++;
                 byMonth[m].count++;
                 if (t.result === 'win') byMonth[m].wins++;
               });
@@ -424,8 +430,8 @@ export default function Performance({ data }) {
                 <div key={m.month} style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                     <span style={{ color: C.text, fontSize: 15, fontWeight: 700 }}>{m.month}</span>
-                    <span style={{ color: m.pips >= 0 ? C.green : C.red, fontWeight: 700, fontSize: 20 }}>
-                      {m.pips >= 0 ? '+' : ''}{m.pips.toFixed(0)}p
+                    <span style={{ color: m.r >= 0 ? C.green : C.red, fontWeight: 700, fontSize: 20 }}>
+                      {fmtR(m.r, 1, m.est > 0)}
                     </span>
                   </div>
                   <div style={{ display: 'flex', gap: 16 }}>
@@ -447,7 +453,7 @@ export default function Performance({ data }) {
               <SectionTitle>⏰ ביצועים לפי שעה</SectionTitle>
               <div style={{ color: C.muted, fontSize: 12, marginBottom: 10 }}>
                 הכי רווחי: <span style={{ color: C.green, fontWeight: 700 }}>
-                  {hourChart.reduce((a, b) => a.פיפס > b.פיפס ? a : b).hour}
+                  {hourChart.reduce((a, b) => a.R > b.R ? a : b).hour}
                 </span>
               </div>
               <div style={{ height: 200 }}>
@@ -457,8 +463,8 @@ export default function Performance({ data }) {
                     <XAxis dataKey="hour" tick={{ fill: C.muted, fontSize: 9 }} />
                     <YAxis tick={{ fill: C.muted, fontSize: 10 }} />
                     <Tooltip contentStyle={TT} />
-                    <Bar dataKey="פיפס" radius={[4, 4, 0, 0]}>
-                      {hourChart.map((e, i) => <Cell key={i} fill={e.פיפס >= 0 ? C.green : C.red} />)}
+                    <Bar dataKey="R" radius={[4, 4, 0, 0]}>
+                      {hourChart.map((e, i) => <Cell key={i} fill={e.R >= 0 ? C.green : C.red} />)}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -469,7 +475,7 @@ export default function Performance({ data }) {
                     <span style={{ color: C.muted }}>{h.hour}</span>
                     <span style={{ color: C.text }}>{h.עסקאות} עסקאות</span>
                     <span style={{ color: C.blue }}>{h.winRate}% Win</span>
-                    <span style={{ color: h.פיפס >= 0 ? C.green : C.red, fontWeight: 600 }}>{h.פיפס >= 0 ? '+' : ''}{h.פיפס}p</span>
+                    <span style={{ color: h.R >= 0 ? C.green : C.red, fontWeight: 600 }}>{fmtR(h.R)}</span>
                   </div>
                 ))}
               </div>
@@ -483,7 +489,7 @@ export default function Performance({ data }) {
               <SectionTitle>📅 ביצועים לפי יום בשבוע</SectionTitle>
               <div style={{ color: C.muted, fontSize: 12, marginBottom: 10 }}>
                 הכי רווחי: <span style={{ color: C.green, fontWeight: 700 }}>
-                  {dayChart.reduce((a, b) => a.פיפס > b.פיפס ? a : b).name}
+                  {dayChart.reduce((a, b) => a.R > b.R ? a : b).name}
                 </span>
               </div>
               <div style={{ height: 180 }}>
@@ -493,8 +499,8 @@ export default function Performance({ data }) {
                     <XAxis dataKey="name" tick={{ fill: C.muted, fontSize: 10 }} />
                     <YAxis tick={{ fill: C.muted, fontSize: 10 }} />
                     <Tooltip contentStyle={TT} />
-                    <Bar dataKey="פיפס" radius={[4, 4, 0, 0]}>
-                      {dayChart.map((e, i) => <Cell key={i} fill={e.פיפס >= 0 ? C.accent : C.red} />)}
+                    <Bar dataKey="R" radius={[4, 4, 0, 0]}>
+                      {dayChart.map((e, i) => <Cell key={i} fill={e.R >= 0 ? C.accent : C.red} />)}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -505,7 +511,7 @@ export default function Performance({ data }) {
                     <span style={{ color: C.text, fontWeight: 600, minWidth: 50 }}>{d.name}</span>
                     <span style={{ color: C.muted }}>{d.עסקאות} עסקאות</span>
                     <span style={{ color: C.blue }}>{d.winRate}% Win</span>
-                    <span style={{ color: d.פיפס >= 0 ? C.green : C.red, fontWeight: 600 }}>{d.פיפס >= 0 ? '+' : ''}{d.פיפס}p</span>
+                    <span style={{ color: d.R >= 0 ? C.green : C.red, fontWeight: 600 }}>{fmtR(d.R)}</span>
                   </div>
                 ))}
               </div>
@@ -563,7 +569,7 @@ export default function Performance({ data }) {
 
       {/* ── REVENGE ── */}
       {activeSection === 'revenge' && (
-        <RevengeDetector trades={trades} />
+        <RevengeDetector trades={trades} R={R} />
       )}
     </div>
   );

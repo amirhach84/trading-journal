@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { C } from '../theme';
 import { Card, SectionTitle, Check, Textarea, Btn, YesNo, StatBox } from './UI';
+import { weekStatus, rContext, fmtR } from '../rMultiple';
 
 const emptyForm = () => ({
   weekStart: new Date().toISOString().slice(0, 10),
   goalExecution: false, goal2R: false, goalNoRecover: false,
-  goalStop100: false, goalNoForce: false,
-  confirmedStop100: false, confirmedNoSetup: false,
+  goalMaxTrades: false, goalNoForce: false,
+  confirmedStopOnLosses: false, confirmedNoSetup: false,
   weekGoal: '',
-  stopped100: null, onlyRealSetups: null,
+  keptMaxTrades: null, onlyRealSetups: null,
   triedHomeRun: null, kept2R: null, deposited: null,
   dangerHabit: '', goodHabit: '', nextWeekFix: '',
   weekMotto: '',
@@ -18,11 +19,14 @@ export default function Weekly({ data, save, showToast, weekTrades, weekPips, we
   const [form, setForm] = useState(emptyForm());
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const weekStopped = weekPips >= 100;
-  const pipsColor = weekStopped ? C.red : weekPips > 60 ? C.warn : C.green;
+  const R = rContext(data.trades || []);
+  const wk = weekStatus(data, data.settings);
+  const rColor = wk.totalR > 0 ? C.green : wk.totalR < 0 ? C.red : C.muted;
 
   const saveWeekly = () => {
-    const plan = { ...form, savedAt: new Date().toISOString(), id: Date.now(), weekPips, weekSetups };
+    const plan = { ...form, savedAt: new Date().toISOString(), id: Date.now(),
+      weekR: +wk.totalR.toFixed(2), weekTradesUsed: wk.used, weekLosses: wk.losses,
+      weekPips, weekSetups };
     save({ ...data, weeklyPlans: [...data.weeklyPlans, plan] });
     showToast('✓ סיכום שבועי נשמר!');
   };
@@ -43,14 +47,24 @@ export default function Weekly({ data, save, showToast, weekTrades, weekPips, we
       <Card style={{ background: 'linear-gradient(135deg, #0d0d1a, #0a0d16)', borderColor: C.blue + '44' }}>
         <SectionTitle>סטטוס שבוע נוכחי</SectionTitle>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
-          <StatBox label="פיפס השבוע" value={weekPips.toFixed(0)} unit="/100" color={pipsColor} />
-          <StatBox label="Setups" value={weekSetups} unit="/2" color={weekSetups >= 2 ? C.red : C.accent} />
-          <StatBox label="עסקאות השבוע" value={weekTrades.length} color={C.text} />
+          <StatBox label="R השבוע" value={fmtR(wk.totalR, 2, wk.estimated > 0)} color={rColor} />
+          <StatBox label="עסקאות" value={wk.used} unit={`/${wk.maxTrades}`}
+            color={wk.used >= wk.maxTrades ? C.red : wk.used === wk.maxTrades - 1 ? C.warn : C.accent} />
+          <StatBox label="הפסדים" value={wk.losses} unit={`/${wk.maxLosses}`}
+            color={wk.losses >= wk.maxLosses ? C.red : wk.losses === wk.maxLosses - 1 ? C.warn : C.text} />
         </div>
 
-        {weekStopped && (
-          <div style={{ padding: '12px 14px', background: '#081a08', border: `1px solid ${C.green}44`, borderRadius: 10, color: C.green, fontSize: 14, fontWeight: 600, textAlign: 'center' }}>
-            🎯 100 פיפס הושגו — שבוע המסחר הסתיים. כל הכבוד!
+        {wk.stopped ? (
+          <div style={{ padding: '12px 14px', background: '#1a0808', border: `1px solid ${C.red}66`, borderRadius: 10, color: C.red, fontSize: 14, fontWeight: 600, textAlign: 'center', lineHeight: 1.7 }}>
+            🚫 שבוע המסחר הסתיים
+            <div style={{ color: C.muted, fontSize: 12, fontWeight: 400, marginTop: 4 }}>
+              {wk.reasons.join(' · ')}
+            </div>
+          </div>
+        ) : (
+          <div style={{ padding: '10px 14px', background: C.card2, borderRadius: 10, color: C.muted, fontSize: 13, textAlign: 'center' }}>
+            נותרו <span style={{ color: C.accent, fontWeight: 700 }}>{wk.remaining}</span> עסקאות
+            {' · '}עוד <span style={{ color: C.warn, fontWeight: 700 }}>{wk.lossesLeft}</span> הפסדים עד עצירה
           </div>
         )}
 
@@ -61,8 +75,8 @@ export default function Weekly({ data, save, showToast, weekTrades, weekPips, we
                 <span style={{ color: C.muted }}>{t.date} — <span style={{ color: C.text }}>{t.pair}</span></span>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <span style={{ color: C.muted, fontSize: 12 }}>🎯{t.disciplineScore}/10</span>
-                  <span style={{ color: t.pips > 0 ? C.green : t.pips < 0 ? C.red : C.muted, fontWeight: 600 }}>
-                    {t.pips > 0 ? '+' : ''}{t.pips}p
+                  <span style={{ color: R.value(t) > 0 ? C.green : R.value(t) < 0 ? C.red : C.muted, fontWeight: 600 }}>
+                    {R.fmt(t)}
                   </span>
                 </div>
               </div>
@@ -86,14 +100,14 @@ export default function Weekly({ data, save, showToast, weekTrades, weekPips, we
         <Check label="לבצע רק עסקאות לפי החוקים" checked={form.goalExecution} onChange={() => set('goalExecution', !form.goalExecution)} />
         <Check label="לשמור על 2R קבוע" checked={form.goal2R} onChange={() => set('goal2R', !form.goal2R)} />
         <Check label="לא לנסות להחזיר הפסדים" checked={form.goalNoRecover} onChange={() => set('goalNoRecover', !form.goalNoRecover)} />
-        <Check label="לעצור ב-100 פיפס" checked={form.goalStop100} onChange={() => set('goalStop100', !form.goalStop100)} />
+        <Check label={`לא לעבור ${wk.maxTrades} עסקאות השבוע`} checked={form.goalMaxTrades} onChange={() => set('goalMaxTrades', !form.goalMaxTrades)} />
         <Check label="לא להכריח setup שלא קיים" checked={form.goalNoForce} onChange={() => set('goalNoForce', !form.goalNoForce)} />
 
         <div style={{ padding: '12px 14px', background: '#0d1020', borderRadius: 10, marginTop: 8, marginBottom: 14 }}>
           <Check
-            label="אם אגיע ל-100 פיפס — אני מפסיק לסחור עד שבוע הבא"
-            checked={form.confirmedStop100}
-            onChange={() => set('confirmedStop100', !form.confirmedStop100)}
+            label={`אם אפסיד ${wk.maxLosses} עסקאות — אני מפסיק לסחור עד שבוע הבא`}
+            checked={form.confirmedStopOnLosses}
+            onChange={() => set('confirmedStopOnLosses', !form.confirmedStopOnLosses)}
           />
           <Check
             label="אם אין setup אמיתי — אני לא סוחר בכלל"
@@ -123,8 +137,8 @@ export default function Weekly({ data, save, showToast, weekTrades, weekPips, we
         <SectionTitle>סיכום סוף שבוע</SectionTitle>
 
         <div style={{ marginBottom: 16 }}>
-          <div style={{ color: C.muted, fontSize: 11, marginBottom: 8, letterSpacing: 0.5 }}>עצרתי ב-100 פיפס כשהגעתי?</div>
-          <YesNo value={form.stopped100} onChange={v => set('stopped100', v)} na />
+          <div style={{ color: C.muted, fontSize: 11, marginBottom: 8, letterSpacing: 0.5 }}>עצרתי בזמן — לא עברתי {wk.maxTrades} עסקאות ולא המשכתי אחרי {wk.maxLosses} הפסדים?</div>
+          <YesNo value={form.keptMaxTrades} onChange={v => set('keptMaxTrades', v)} na />
         </div>
         <div style={{ marginBottom: 16 }}>
           <div style={{ color: C.muted, fontSize: 11, marginBottom: 8, letterSpacing: 0.5 }}>לקחתי רק setups אמיתיים?</div>
@@ -158,7 +172,9 @@ export default function Weekly({ data, save, showToast, weekTrades, weekPips, we
             <div key={p.id} style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                 <span style={{ color: C.text, fontSize: 14 }}>שבוע {p.weekStart}</span>
-                <span style={{ color: p.weekPips >= 100 ? C.green : C.accent, fontWeight: 700 }}>{p.weekPips?.toFixed(0)}p</span>
+                <span style={{ color: (p.weekR ?? 0) >= 0 ? C.green : C.red, fontWeight: 700 }}>
+                  {p.weekR !== undefined ? fmtR(p.weekR) : `${p.weekPips?.toFixed(0)}p`}
+                </span>
               </div>
               {p.weekGoal && <div style={{ color: C.muted, fontSize: 12 }}>{p.weekGoal}</div>}
               {p.weekMotto && <div style={{ color: C.blue, fontSize: 11, fontStyle: 'italic', marginTop: 4 }}>{p.weekMotto}</div>}

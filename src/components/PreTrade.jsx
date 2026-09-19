@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { C } from '../theme';
 import { Card, SectionTitle, Check, Input, Select, Textarea, ScoreSlider, Btn, SegmentedControl } from './UI';
+import { weekStatus, fmtR } from '../rMultiple';
 
 const CHECKLIST = [
   'זה setup מלא לפי האסטרטגיה שלי',
@@ -40,8 +41,11 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
   const allChecked = form.checks.every(Boolean) && form.declarationRead;
   const dayLimit = (daySetups || 0) >= 2;
 
-  // Only cooldown and daily limit block trading — 100 pips is a warning only
-  const blocked = isCooldown || dayLimit;
+  // חוקי השבוע: מקסימום 5 עסקאות, ועצירה מלאה ב-3 הפסדים
+  const wk = weekStatus(data, data.settings);
+
+  // cooldown, מגבלה יומית וחוקי השבוע — כולם חוסמים
+  const blocked = isCooldown || dayLimit || wk.stopped;
 
   const handleSave = () => {
     if (!allChecked) { showToast('סמן את כל הסעיפים לפני הכניסה', 'err'); return; }
@@ -68,13 +72,37 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
         </Card>
       )}
 
-      {/* 100 pips warning — info only, does NOT block */}
-      {!isCooldown && weekStopped && (
-        <Card style={{ background: '#081a08', borderColor: C.green + '66' }}>
-          <div style={{ color: C.green, fontWeight: 700, fontSize: 15, marginBottom: 4 }}>✅ הגעת ל-100 פיפס השבוע</div>
-          <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.6 }}>
-            לפי התוכנית — שבוע המסחר הסתיים. אם אתה בוחר להמשיך, זכור:<br />
-            המטרה היא משמעת, לא ריגוש.
+      {/* Weekly rules — these BLOCK */}
+      {!isCooldown && wk.stopped && (
+        <Card style={{ background: '#1a0808', borderColor: C.red }}>
+          <div style={{ color: C.red, fontWeight: 700, fontSize: 16, marginBottom: 6 }}>🚫 שבוע המסחר הסתיים</div>
+          <div style={{ color: C.text, fontSize: 14, lineHeight: 1.7 }}>
+            {wk.reasons.map((r, i) => <div key={i}>• {r}</div>)}
+          </div>
+          <div style={{ color: C.muted, fontSize: 12, marginTop: 8 }}>
+            השבוע נסגר ב-{fmtR(wk.totalR, 2, wk.estimated > 0)}. חזור ביום ראשון.
+          </div>
+        </Card>
+      )}
+
+      {/* Weekly budget — still open */}
+      {!isCooldown && !wk.stopped && (
+        <Card style={{ background: C.card2, borderColor: wk.remaining <= 1 || wk.lossesLeft <= 1 ? C.warn + '66' : C.border }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, textAlign: 'center' }}>
+            <div>
+              <div style={{ color: wk.remaining <= 1 ? C.warn : C.accent, fontSize: 20, fontWeight: 700 }}>{wk.remaining}</div>
+              <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>עסקאות שנותרו</div>
+            </div>
+            <div>
+              <div style={{ color: wk.lossesLeft <= 1 ? C.warn : C.text, fontSize: 20, fontWeight: 700 }}>{wk.lossesLeft}</div>
+              <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>הפסדים עד עצירה</div>
+            </div>
+            <div>
+              <div style={{ color: wk.totalR >= 0 ? C.green : C.red, fontSize: 20, fontWeight: 700 }}>
+                {fmtR(wk.totalR, 1, wk.estimated > 0)}
+              </div>
+              <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>R השבוע</div>
+            </div>
           </div>
         </Card>
       )}
@@ -191,6 +219,7 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
 
       <Btn onClick={handleSave} disabled={!allChecked || blocked} color={C.green}>
         {isCooldown ? '🚫 עצירת 48 שעות פעילה'
+          : wk.stopped ? '🚫 שבוע המסחר הסתיים'
           : dayLimit ? '🚫 מקסימום 2 עסקאות היום'
           : allChecked ? '✓ שמור צ׳קליסט ועבור לעסקה'
           : 'יש לסמן את כל הסעיפים'}

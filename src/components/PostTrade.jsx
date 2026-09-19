@@ -3,6 +3,7 @@ import { C } from '../theme';
 import { Card, SectionTitle, Check, Input, Select, Textarea, ScoreSlider, Btn, SegmentedControl } from './UI';
 import { PAIRS as PAIR_SPECS, pipValueOf } from '../pairs';
 import { computeBalance } from '../accountBalance';
+import LossReasonPicker from './LossReasonPicker';
 
 const PAIRS = ['GBPJPY', 'EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'EURJPY', 'אחר'];
 
@@ -18,6 +19,7 @@ const emptyForm = () => ({
   tp: '',
   result: 'win',
   pips: '',
+  lossReason: null,
   lots: '',
   swap: '',
   grossUsd: '',
@@ -120,6 +122,8 @@ export default function PostTrade({ data, save, showToast }) {
 
   const handleSave = () => {
     if (!form.pips && form.pips !== 0) { showToast('הזן כמה פיפס', 'err'); return; }
+    const isLoss = form.result === 'loss' || (parseFloat(form.pips) || 0) < 0;
+    if (isLoss && !form.lossReason) { showToast('בחר סיבת הפסד לפני השמירה', 'err'); return; }
 
     // Always trust the ORIGINAL open trade's date when one is selected —
     // never let a stale/default form date overwrite it. This is what makes
@@ -254,6 +258,12 @@ export default function PostTrade({ data, save, showToast }) {
         <Input label={`פיפס ${form.result === 'loss' ? '(מינוס להפסד)' : ''}`}
           type="number" value={form.pips} onChange={v => set('pips', v)}
           placeholder={form.result === 'loss' ? '-30' : '40'} />
+
+        {(form.result === 'loss' || (parseFloat(form.pips) || 0) < 0) && (
+          <div style={{ marginTop: 4, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+            <LossReasonPicker value={form.lossReason} onChange={v => set('lossReason', v)} />
+          </div>
+        )}
       </Card>
 
       {/* Money */}
