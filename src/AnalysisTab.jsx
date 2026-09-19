@@ -387,7 +387,7 @@ export default function AnalysisTab({ trades = DEMO_TRADES, events = DEMO_EVENTS
               <div style={{ marginTop: 12, fontSize: 12.5, color: C.muted, lineHeight: 1.8,
                 background: C.bg, padding: "10px 12px", borderRadius: 10 }}>
                 בלי הטעויות התקופה נסגרת על{" "}
-                <b style={{ color: (S.netPips / (RC.fallbackSl || 35)) - LS.errorR >= 0 ? C.green : C.red }}>
+                <b style={{ color: RC.sum(inPeriod) - LS.errorR >= 0 ? C.green : C.red }}>
                   {fmtR(RC.sum(inPeriod) - LS.errorR, 1)}
                 </b>{" "}
                 במקום {fmtR(RC.sum(inPeriod), 1)}.

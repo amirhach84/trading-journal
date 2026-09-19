@@ -1,11 +1,16 @@
 /* ------------------------------------------------------------------
    rMultiple.js — R כמדד המרכזי של האפליקציה
-     R מדויק  = פיפס ÷ מרחק הסטופ שנשמר על העסקה
-     R מוערך  = פיפס ÷ חציון הסטופ ההיסטורי  (מסומן ב-~)
+
+     1R = |Entry − SL|      יחידת הסיכון של העסקה
+     R  = פיפס בפועל ÷ 1R
+
+   SL מוטרג -> -1R  ·  TP ב-1:2 -> +2R  ·  סגירה באמצע -> יחסי
+
+   בלי Entry ו-SL אין R. המודול מחזיר null ולא ממציא מספר,
+   והתצוגה נופלת לפיפס.
    ------------------------------------------------------------------ */
 
 const PIP = { GBPJPY: 0.01, GBPUSD: 0.0001, EURUSD: 0.0001, USDJPY: 0.01, EURJPY: 0.01, XAUUSD: 0.1 };
-const DEFAULT_SL = 35;      // גיבוי אחרון אם אין שום עסקה עם SL
 
 const num = (v) => {
   const x = typeof v === 'number' ? v : parseFloat(v);
@@ -26,12 +31,30 @@ export function slPipsOf(t) {
   return null;
 }
 
-/** חציון הסטופ מכל העסקאות שיש להן נתון */
-export function medianSl(trades = []) {
-  const v = trades.map(slPipsOf).filter((x) => x && x > 0).sort((a, b) => a - b);
-  if (!v.length) return DEFAULT_SL;
-  const m = Math.floor(v.length / 2);
-  return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+/** מרחק ה-TP בפיפס, אם הוזן */
+export function tpPipsOf(t) {
+  const direct = num(t.tpPips);
+  if (direct && direct > 0) return direct;
+  const e = num(t.entry), tp = num(t.tp);
+  if (e !== null && tp !== null && e !== tp) {
+    const d = Math.abs(e - tp) / pipSize(t.pair);
+    return d > 0 ? d : null;
+  }
+  return null;
+}
+
+/** היחס המתוכנן, TP ÷ SL. בעסקת 1:2 יחזיר 2 */
+export function plannedRR(t) {
+  const sl = slPipsOf(t), tp = tpPipsOf(t);
+  return sl && tp ? tp / sl : null;
+}
+
+/** R בפועל, או null אם אין Entry ו-SL */
+export function rOf(t) {
+  const sl = slPipsOf(t);
+  const pips = num(t.pips);
+  if (!sl || pips === null) return null;
+  return pips / sl;
 }
 
 /**
@@ -41,37 +64,40 @@ export function medianSl(trades = []) {
  *   R.value(trade)     -> number
  *   R.fmt(trade)       -> "+2.15R" | "~+1.24R"
  */
-export function rContext(allTrades = []) {
-  const fallback = medianSl(allTrades);
-
+export function rContext() {
   const of = (t) => {
-    const pips = num(t.pips);
-    if (pips === null) return { value: 0, estimated: true, missing: true };
-    const sl = slPipsOf(t);
-    if (sl) return { value: pips / sl, estimated: false, missing: false };
-    return { value: pips / fallback, estimated: true, missing: false };
+    const r = rOf(t);
+    return r === null
+      ? { value: 0, hasR: false, planned: plannedRR(t) }
+      : { value: r, hasR: true, planned: plannedRR(t) };
   };
 
   return {
-    fallbackSl: fallback,
     of,
+    /** R לחישובים. 0 לעסקה בלי SL — היא פשוט לא נספרת ב-R */
     value: (t) => of(t).value,
-    exact: (t) => !of(t).estimated,
+    hasR: (t) => of(t).hasR,
+    /** תצוגה: R כשניתן, אחרת פיפס */
     fmt: (t, digits = 2) => {
-      const { value, estimated } = of(t);
-      return `${estimated ? '~' : ''}${value > 0 ? '+' : ''}${value.toFixed(digits)}R`;
+      const { value, hasR } = of(t);
+      if (!hasR) {
+        const p = num(t.pips) || 0;
+        return `${p > 0 ? '+' : ''}${p.toFixed(0)}p`;
+      }
+      return `${value > 0 ? '+' : ''}${value.toFixed(digits)}R`;
     },
-    /** כמה מהעסקאות ברשימה הן אומדן */
-    estimatedCount: (list) => list.filter((t) => of(t).estimated).length,
+    /** כמה עסקאות ברשימה חסרות SL */
+    missingCount: (list) => list.filter((t) => !of(t).hasR).length,
+    estimatedCount: (list) => list.filter((t) => !of(t).hasR).length,
     sum: (list) => list.reduce((s, t) => s + of(t).value, 0),
   };
 }
 
 /** פורמט למספר R בודד */
-export const fmtR = (v, digits = 2, estimated = false) =>
+export const fmtR = (v, digits = 2, partial = false) =>
   v === null || v === undefined
     ? '—'
-    : `${estimated ? '~' : ''}${v > 0 ? '+' : ''}${v.toFixed(digits)}R`;
+    : `${v > 0 ? '+' : ''}${v.toFixed(digits)}R${partial ? '*' : ''}`;
 
 /* ------------------------------------------------------------------
    סיכומים
