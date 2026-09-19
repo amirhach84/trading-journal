@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { C } from '../theme';
 import { Card, SectionTitle, Input, Textarea, ScoreSlider, SegmentedControl } from './UI';
-import { rContext, fmtR, validateLevels, tradesNeedingFix } from '../rMultiple';
+import { rContext, fmtR, validateLevels, tradesNeedingFix, R_START } from '../rMultiple';
 import LossReasonPicker from './LossReasonPicker';
 import { reasonById } from '../lossReasons';
 
@@ -229,8 +229,8 @@ export default function History({ data, save, showToast }) {
       <Card style={{ borderColor: C.warn + '55', background: '#16120a' }}>
         <SectionTitle>עסקאות שה-R שלהן לא אמין</SectionTitle>
         <div style={{ color: C.muted, fontSize: 12.5, lineHeight: 1.8, marginBottom: 14 }}>
-          {needFix.length} עסקאות שבהן מרחק הסטופ לא יכול להיות נכון, ולכן הן לא
-          נספרות ב-R. כמעט כולן רווחיות — לכן סיכומי ה-R נראים גרועים ממה שהיה בפועל.
+          {needFix.length} עסקאות מ-{R_START} והלאה שבהן מרחק הסטופ לא יכול להיות נכון,
+          ולכן הן לא נספרות ב-R. עסקאות מלפני התאריך הזה נמדדות בפיפס ואין צורך לתקן אותן.
           <br />הזן בכל אחת את <b style={{ color: C.text }}>מרחק הסטופ המתוכנן</b>, והעבר
           את המחיר שהיה שם לשדה מחיר היציאה.
         </div>
@@ -365,7 +365,9 @@ export default function History({ data, save, showToast }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 16 }}>
           {[
             { label: 'עסקאות', value: trades.length, color: C.text },
-            { label: 'סה״כ R', value: fmtR(R.sum(trades), 1, R.estimatedCount(trades) > 0), color: R.sum(trades) >= 0 ? C.green : C.red },
+            { label: 'סה״כ פיפס',
+              value: `${trades.reduce((a, t) => a + (parseFloat(t.pips) || 0), 0) > 0 ? '+' : ''}${trades.reduce((a, t) => a + (parseFloat(t.pips) || 0), 0).toFixed(0)}p`,
+              color: trades.reduce((a, t) => a + (parseFloat(t.pips) || 0), 0) >= 0 ? C.green : C.red },
             { label: 'Win Rate', value: `${trades.length ? Math.round((trades.filter(t => t.result === 'win').length / trades.length) * 100) : 0}%`, color: C.blue },
           ].map(s => (
             <div key={s.label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 8px', textAlign: 'center' }}>
@@ -419,12 +421,14 @@ export default function History({ data, save, showToast }) {
                       )}
                     </div>
                     <div style={{ textAlign: 'left', marginRight: 12 }}>
-                      <div style={{ color: R.value(entry) > 0 ? C.green : R.value(entry) < 0 ? C.red : C.muted, fontSize: 20, fontWeight: 700 }}>
-                        {R.fmt(entry)}
-                      </div>
-                      <div style={{ color: C.muted, fontSize: 10, textAlign: 'center' }}>
+                      <div style={{ color: entry.pips > 0 ? C.green : entry.pips < 0 ? C.red : C.muted, fontSize: 20, fontWeight: 700 }}>
                         {entry.pips > 0 ? '+' : ''}{entry.pips}p
                       </div>
+                      {R.of(entry).hasR && (
+                        <div style={{ color: C.muted, fontSize: 11, textAlign: 'center' }}>
+                          {R.fmt(entry)}
+                        </div>
+                      )}
                       {entry.lossReason && (() => {
                         const r = reasonById(entry.lossReason);
                         return r ? (

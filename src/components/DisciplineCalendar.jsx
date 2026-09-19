@@ -29,7 +29,13 @@ export default function DisciplineCalendar({ data, save, showToast }) {
 
   function rForDay(key) {
     const list = trades.filter(t => t.date === key);
-    return { sum: list.reduce((s, t) => s + R.value(t), 0), est: list.some(t => R.of(t).estimated), n: list.length };
+    const c = R.coverage(list);
+    return {
+      n: list.length,
+      useR: c.withR > 0 && !c.allLegacy,
+      sum: c.r,
+      pips: list.reduce((s, t) => s + (parseFloat(t.pips) || 0), 0),
+    };
   } // { '2026-06-30': { feeling, note } }
 
   // Count trades per day
@@ -231,8 +237,8 @@ export default function DisciplineCalendar({ data, save, showToast }) {
                     if (!d.n) return null;
                     return (
                       <span style={{ fontSize: 8, lineHeight: 1, marginTop: 1, fontFamily: 'monospace',
-                        color: d.sum > 0 ? C.green : d.sum < 0 ? C.red : C.muted }}>
-                        {fmtR(d.sum, 1, d.est)}
+                        color: (d.useR ? d.sum : d.pips) > 0 ? C.green : (d.useR ? d.sum : d.pips) < 0 ? C.red : C.muted }}>
+                        {d.useR ? fmtR(d.sum, 1) : `${d.pips > 0 ? '+' : ''}${d.pips.toFixed(0)}p`}
                       </span>
                     );
                   })()}
@@ -273,7 +279,9 @@ export default function DisciplineCalendar({ data, save, showToast }) {
               {tradesForDay(selectedDay.key)} עסקאות באותו יום
               {tradesForDay(selectedDay.key) > 0 && (() => {
                 const d = rForDay(selectedDay.key);
-                return <span style={{ color: d.sum >= 0 ? C.green : C.red, fontWeight: 700 }}> · {fmtR(d.sum, 2, d.est)}</span>;
+                return <span style={{ color: (d.useR ? d.sum : d.pips) >= 0 ? C.green : C.red, fontWeight: 700 }}>
+                  {' · '}{d.useR ? fmtR(d.sum, 2) : `${d.pips > 0 ? '+' : ''}${d.pips.toFixed(0)}p`}
+                </span>;
               })()}
               {tradesForDay(selectedDay.key) > 2 && <span style={{ color: C.red }}> — הכלל הופר</span>}
               {tradesForDay(selectedDay.key) === 0 && <span> — יום מנוחה</span>}

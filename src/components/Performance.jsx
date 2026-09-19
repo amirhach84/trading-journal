@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { C, PIE_COLORS } from '../theme';
 import { Card, SectionTitle, StatBox } from './UI';
-import { rContext, fmtR } from '../rMultiple';
+import { rContext, fmtR, R_START, isLegacy } from '../rMultiple';
 
 // רווח והפסד מיוחסים ליום הסגירה; ספירת עסקאות ליום נשארת על יום הכניסה
 const pnlDate = (t) => t.closeDate || t.date;
@@ -45,7 +45,7 @@ function CalendarView({ trades, dailyLogs, R }) {
     const log = logsByDate[dateStr];
     if (ts.length > 0) {
       const c = R.coverage(ts);
-      const v = c.withR ? c.r : ts.reduce((s, t) => s + (parseFloat(t.pips) || 0), 0);
+      const v = (c.withR && !c.allLegacy) ? c.r : ts.reduce((s, t) => s + (parseFloat(t.pips) || 0), 0);
       return v > 0 ? C.green : v < 0 ? C.red : C.muted;
     }
     // Daily log only — always blue, never red
@@ -98,7 +98,7 @@ function CalendarView({ trades, dailyLogs, R }) {
               <div style={{ color: isToday ? C.accent : C.text, fontSize: 12, fontWeight: isToday ? 700 : 400 }}>{day}</div>
               {ts.length > 0 && (
                 <div style={{ color: (dayCov.withR ? rSum : dayPips) > 0 ? C.green : C.red, fontSize: 9, fontWeight: 600 }}>
-                  {dayCov.withR ? fmtR(rSum, 1, !dayCov.complete) : `${dayPips > 0 ? '+' : ''}${dayPips.toFixed(0)}p`}
+                  {dayCov.withR && !dayCov.allLegacy ? fmtR(rSum, 1) : `${dayPips > 0 ? '+' : ''}${dayPips.toFixed(0)}p`}
                 </div>
               )}
             </div>
@@ -317,25 +317,25 @@ export default function Performance({ data }) {
       {activeSection === 'overview' && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 16 }}>
-            <StatBox label="סה״כ R" value={fmtR(totalR, 1, estCount > 0)} color={totalR >= 0 ? C.green : C.red} />
-            <StatBox label="תוחלת לעסקה" value={fmtR(parseFloat(expectancy))} color={parseFloat(expectancy) >= 0 ? C.green : C.red} />
+            <StatBox label="סה״כ פיפס"
+              value={`${cov.pips > 0 ? '+' : ''}${cov.pips.toFixed(0)}`}
+              color={cov.pips >= 0 ? C.green : C.red} sub={`${total} עסקאות`} />
+            <StatBox label="סה״כ R"
+              value={cov.withR ? fmtR(totalR, 1) : '—'}
+              color={totalR >= 0 ? C.green : C.red}
+              sub={cov.withR ? `${cov.withR} עסקאות` : 'מספטמבר'} />
             <StatBox label="Win Rate" value={`${winRate}%`} color={C.blue} />
-            <StatBox label="סה״כ עסקאות" value={total} sub={`משמעת ${avgDisc}/10`} color={C.text} />
+            <StatBox label="ממוצע משמעת" value={`${avgDisc}/10`} color={C.accent} />
           </div>
 
-          {estCount > 0 && (
-            <div style={{ background: C.warn + '12', border: `1px solid ${C.warn}33`, borderRadius: 10,
-              padding: '11px 13px', marginTop: -4, marginBottom: 16, lineHeight: 1.75, fontSize: 12 }}>
-              <div style={{ color: C.warn, fontWeight: 600, marginBottom: 3 }}>
-                ה-R מחושב על {cov.withR} מתוך {total} עסקאות
-              </div>
-              <div style={{ color: C.muted }}>
-                ל-{estCount} עסקאות אין Entry ו-SL שמורים, ולכן הן לא נספרות ב-R כלל —
-                לא כרווח ולא כהפסד. סך הפיפס על כל {total} העסקאות הוא{' '}
-                <b style={{ color: cov.totalPips >= 0 ? C.green : C.red }}>
-                  {cov.totalPips > 0 ? '+' : ''}{cov.totalPips.toFixed(0)}p
-                </b>. עד שתשלים את הסטופים, הפיפס הוא המדד השלם ו-R הוא חלקי.
-              </div>
+          {cov.legacy > 0 && (
+            <div style={{ background: C.card2, border: `1px solid ${C.border}`, borderRadius: 10,
+              padding: '11px 13px', marginTop: -4, marginBottom: 16, lineHeight: 1.75, fontSize: 12,
+              color: C.muted }}>
+              <b style={{ color: C.text }}>פיפס עד {R_START}, R מכאן והלאה.</b><br />
+              {cov.legacy} עסקאות מהתקופה שלפני כן נמדדות בפיפס בלבד — אז לא נשמרו
+              סטופים מתוכננים.
+              {estCount > 0 && ` ${estCount} עסקאות חדשות עוד דורשות תיקון ולא נספרות ב-R.`}
             </div>
           )}
 
@@ -453,24 +453,20 @@ export default function Performance({ data }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                     <span style={{ color: C.text, fontSize: 15, fontWeight: 700 }}>{m.month}</span>
                     <div style={{ textAlign: 'left' }}>
-                      {m.withR > 0 ? (
+                      {m.month >= R_START.slice(0, 7) && m.withR > 0 ? (
                         <>
                           <span style={{ color: m.r >= 0 ? C.green : C.red, fontWeight: 700, fontSize: 20 }}>
                             {fmtR(m.r, 1)}
                           </span>
-                          {m.est > 0 && (
-                            <div style={{ color: C.muted, fontSize: 10 }}>
-                              על {m.withR}/{m.count} עסקאות
-                            </div>
-                          )}
+                          <div style={{ color: C.muted, fontSize: 10 }}>
+                            {m.pips > 0 ? '+' : ''}{m.pips.toFixed(0)}p
+                            {m.est > 0 ? ` · ${m.withR}/${m.count} עם R` : ''}
+                          </div>
                         </>
                       ) : (
-                        <>
-                          <span style={{ color: m.pips >= 0 ? C.green : C.red, fontWeight: 700, fontSize: 20 }}>
-                            {m.pips > 0 ? '+' : ''}{m.pips.toFixed(0)}p
-                          </span>
-                          <div style={{ color: C.muted, fontSize: 10 }}>אין נתוני R</div>
-                        </>
+                        <span style={{ color: m.pips >= 0 ? C.green : C.red, fontWeight: 700, fontSize: 20 }}>
+                          {m.pips > 0 ? '+' : ''}{m.pips.toFixed(0)}p
+                        </span>
                       )}
                     </div>
                   </div>
