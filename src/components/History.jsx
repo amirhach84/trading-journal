@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { C } from '../theme';
 import { Card, SectionTitle, Input, Textarea, ScoreSlider, SegmentedControl } from './UI';
-import { rContext, fmtR } from '../rMultiple';
+import { rContext, fmtR, validateLevels } from '../rMultiple';
 import LossReasonPicker from './LossReasonPicker';
 import { reasonById } from '../lossReasons';
 
@@ -40,6 +40,17 @@ function EditTradeModal({ trade, onSave, onDelete, onClose }) {
               { value: 'loss', label: '🔴 הפסד', color: C.red },
               { value: 'be', label: '⚪ BE', color: C.muted },
             ]} />
+          </div>
+          {validateLevels(form).length > 0 && (
+            <div style={{ padding: '10px 13px', background: '#1a0808', border: `1px solid ${C.red}55`,
+              borderRadius: 9, color: C.red, fontSize: 12.5, lineHeight: 1.7, marginBottom: 14 }}>
+              {validateLevels(form).map((e, i) => <div key={i}>• {e}</div>)}
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Input label="תאריך כניסה" type="date" value={form.date || ''} onChange={v => set('date', v)} />
+            <Input label="תאריך סגירה" type="date" value={form.closeDate || form.date || ''}
+              onChange={v => set('closeDate', v)} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <Input label="פיפס" type="number" value={String(form.pips)} onChange={v => set('pips', parseFloat(v) || 0)} />

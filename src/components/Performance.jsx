@@ -8,6 +8,9 @@ import { C, PIE_COLORS } from '../theme';
 import { Card, SectionTitle, StatBox } from './UI';
 import { rContext, fmtR } from '../rMultiple';
 
+// רווח והפסד מיוחסים ליום הסגירה; ספירת עסקאות ליום נשארת על יום הכניסה
+const pnlDate = (t) => t.closeDate || t.date;
+
 const TT = { background: '#111118', border: `1px solid #1e1e2e`, borderRadius: 8, color: '#e8e0d0', fontSize: 12 };
 
 function getWeekKey(dateStr) {
@@ -30,8 +33,9 @@ function CalendarView({ trades, dailyLogs, R }) {
   // Map data by date
   const tradesByDate = {};
   trades.forEach(t => {
-    if (!tradesByDate[t.date]) tradesByDate[t.date] = [];
-    tradesByDate[t.date].push(t);
+    const k = pnlDate(t);
+    if (!tradesByDate[k]) tradesByDate[k] = [];
+    tradesByDate[k].push(t);
   });
   const logsByDate = {};
   dailyLogs.forEach(l => { logsByDate[l.date] = l; });
@@ -148,7 +152,9 @@ function RevengeDetector({ trades, R }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <span style={{ color: C.text, fontWeight: 600 }}>{r.trade.pair}</span>
-              <span style={{ color: C.muted, fontSize: 12, marginRight: 8 }}>{r.trade.date}</span>
+              <span style={{ color: C.muted, fontSize: 12, marginRight: 8 }}>
+                {r.trade.date}{r.trade.closeDate && r.trade.closeDate !== r.trade.date ? ` → ${r.trade.closeDate}` : ''}
+              </span>
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <span style={{ color: C.warn, fontSize: 12 }}>{r.minutesAfter} דקות אחרי הפסד</span>
@@ -237,7 +243,7 @@ export default function Performance({ data }) {
   const DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
   const byDay = DAY_NAMES.map((name, i) => ({ name, r: 0, count: 0, wins: 0, day: i }));
   trades.forEach(t => {
-    const d = new Date(t.date).getDay();
+    const d = new Date(pnlDate(t)).getDay();
     byDay[d].r += R.value(t);
     byDay[d].count++;
     if (t.result === 'win') byDay[d].wins++;
@@ -258,7 +264,7 @@ export default function Performance({ data }) {
 
   const byWeek = {};
   trades.forEach(t => {
-    const wk = getWeekKey(t.date);
+    const wk = getWeekKey(pnlDate(t));
     if (!byWeek[wk]) byWeek[wk] = { week: wk, r: 0, disc: [], wins: 0, count: 0 };
     byWeek[wk].r += R.value(t);
     byWeek[wk].disc.push(t.disciplineScore || 0);
@@ -419,7 +425,7 @@ export default function Performance({ data }) {
             {(() => {
               const byMonth = {};
               trades.forEach(t => {
-                const m = t.date.slice(0, 7);
+                const m = pnlDate(t).slice(0, 7);
                 if (!byMonth[m]) byMonth[m] = { month: m, r: 0, count: 0, wins: 0, est: 0 };
                 byMonth[m].r += R.value(t);
                 if (R.of(t).estimated) byMonth[m].est++;

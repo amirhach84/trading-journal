@@ -4,7 +4,7 @@ import { Card, SectionTitle, Check, Input, Select, Textarea, ScoreSlider, Btn, S
 import { PAIRS as PAIR_SPECS, pipValueOf } from '../pairs';
 import { computeBalance } from '../accountBalance';
 import LossReasonPicker from './LossReasonPicker';
-import { rContext } from '../rMultiple';
+import { rContext, validateLevels, pipsFromExit } from '../rMultiple';
 import { reasonById } from '../lossReasons';
 
 const PAIRS = ['GBPJPY', 'EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'EURJPY', 'אחר'];
@@ -12,6 +12,7 @@ const PAIRS = ['GBPJPY', 'EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'EURJPY', 'אח
 const emptyForm = () => ({
   date: new Date().toISOString().slice(0, 10),
   time: '',
+  closeDate: new Date().toISOString().slice(0, 10),
   closeTime: new Date().toTimeString().slice(0, 5),
   pair: 'GBPJPY',
   direction: 'long',
@@ -19,6 +20,7 @@ const emptyForm = () => ({
   entry: '',
   sl: '',
   tp: '',
+  exitPrice: '',
   result: 'win',
   pips: '',
   lossReason: null,
@@ -104,6 +106,15 @@ export default function PostTrade({ data, save, showToast }) {
   const avgScore = Math.round((form.disciplineScore + form.patienceScore + form.emotionScore) / 3);
   const avgColor = avgScore >= 7 ? C.green : avgScore >= 5 ? C.warn : C.red;
 
+  // ---- תקינות הרמות ----
+  const levelErrors = validateLevels(form);
+
+  // ---- פיפס ממחיר היציאה ----
+  const autoPips = pipsFromExit({
+    entry: form.entry, exitPrice: form.exitPrice,
+    direction: form.direction, pair: form.pair,
+  });
+
   // ---- חישובי כסף ----
   const spec = PAIR_SPECS[form.pair];
   const pipValue = pipValueOf(form.pair, settings.usdjpy);         // ללוט אחד
@@ -123,6 +134,7 @@ export default function PostTrade({ data, save, showToast }) {
   const money = (v) => (v < 0 ? '−$' : '$') + Math.abs(v).toFixed(2);
 
   const handleSave = () => {
+    if (levelErrors.length) { showToast(levelErrors[0], 'err'); return; }
     if (!form.pips && form.pips !== 0) { showToast('הזן כמה פיפס', 'err'); return; }
     const isLoss = form.result === 'loss' || (parseFloat(form.pips) || 0) < 0;
     if (isLoss && !form.lossReason) { showToast('בחר סיבת הפסד לפני השמירה', 'err'); return; }
@@ -143,6 +155,8 @@ export default function PostTrade({ data, save, showToast }) {
       ...form,
       date: entryDate,      // force entry-date, overriding any drift in form.date
       time: entryTime,      // שעת כניסה — מזינה את פילוח הסשנים
+      closeDate: form.closeDate || entryDate,
+      exitPrice: form.exitPrice === '' ? null : parseFloat(form.exitPrice),
       pips: parseFloat(form.pips) || 0,
       lots: lots || null,
       swap,
@@ -152,7 +166,7 @@ export default function PostTrade({ data, save, showToast }) {
       usdjpyAtEntry: spec && spec.needsRate ? (parseFloat(settings.usdjpy) || null) : null,
       slPips: slPips !== null ? +slPips.toFixed(1) : null,
       balanceAtEntry: +balanceAtEntry.toFixed(2),
-      heldOvernight: swap !== 0,
+      heldOvernight: (form.closeDate || entryDate) !== entryDate || swap !== 0,
       savedAt: new Date().toISOString(),
       id: selectedOpenId || Date.now(),
       status: 'closed',
@@ -227,12 +241,19 @@ export default function PostTrade({ data, save, showToast }) {
         )}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, overflow: 'hidden' }}>
           <div style={{ minWidth: 0 }}>
-            <Input label="שעת סגירה" type="time" value={form.closeTime} onChange={v => set('closeTime', v)} />
+            <Input label="תאריך סגירה" type="date" value={form.closeDate} onChange={v => set('closeDate', v)} />
           </div>
           <div style={{ minWidth: 0 }}>
-            <Input label="Setup מס׳" value={form.setupNum} onChange={v => set('setupNum', v)} />
+            <Input label="שעת סגירה" type="time" value={form.closeTime} onChange={v => set('closeTime', v)} />
           </div>
         </div>
+        {form.closeDate && form.closeDate !== form.date && (
+          <div style={{ color: C.warn, fontSize: 11.5, marginTop: -8, marginBottom: 12, lineHeight: 1.6 }}>
+            עסקה שהוחזקה {Math.round((new Date(form.closeDate) - new Date(form.date)) / 864e5)} ימים.
+            הרווח ייוחס ל-{form.closeDate}, והעסקה תיספר ליום המסחר {form.date}.
+          </div>
+        )}
+        <Input label="Setup מס׳" value={form.setupNum} onChange={v => set('setupNum', v)} />
         <Select label="צמד" value={form.pair} onChange={v => set('pair', v)} options={PAIRS} />
 
         <div style={{ marginBottom: 14 }}>
@@ -245,9 +266,40 @@ export default function PostTrade({ data, save, showToast }) {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
           <Input label="Entry" value={form.entry} onChange={v => set('entry', v)} placeholder="211.40" />
-          <Input label="Stop Loss" value={form.sl} onChange={v => set('sl', v)} placeholder="211.05" />
-          <Input label="Take Profit" value={form.tp} onChange={v => set('tp', v)} placeholder="212.10" />
+          <Input label="Stop Loss (מתוכנן)" value={form.sl} onChange={v => set('sl', v)} placeholder="211.05" />
+          <Input label="Take Profit (מתוכנן)" value={form.tp} onChange={v => set('tp', v)} placeholder="212.10" />
         </div>
+
+        <Input label="מחיר יציאה — איפה העסקה נסגרה בפועל" value={form.exitPrice}
+          onChange={v => set('exitPrice', v)} placeholder="211.80" />
+
+        {levelErrors.length > 0 && (
+          <div style={{ padding: '10px 13px', background: '#1a0808', border: `1px solid ${C.red}55`,
+            borderRadius: 9, color: C.red, fontSize: 12.5, lineHeight: 1.7, marginBottom: 14 }}>
+            {levelErrors.map((e, i) => <div key={i}>• {e}</div>)}
+          </div>
+        )}
+
+        {autoPips !== null && (
+          <div style={{ padding: '10px 13px', background: C.card2, border: `1px solid ${C.border}`,
+            borderRadius: 9, marginBottom: 14, display: 'flex', alignItems: 'center',
+            justifyContent: 'space-between', gap: 10 }}>
+            <span style={{ color: C.muted, fontSize: 12.5 }}>
+              ממחיר היציאה יוצא <b style={{ color: autoPips >= 0 ? C.green : C.red }}>
+                {autoPips > 0 ? '+' : ''}{autoPips} פיפס</b>
+            </span>
+            {parseFloat(form.pips) !== autoPips && (
+              <button onClick={() => {
+                set('pips', String(autoPips));
+                set('result', autoPips > 0 ? 'win' : autoPips < 0 ? 'loss' : 'be');
+              }} style={{
+                background: C.accent + '18', border: `1px solid ${C.accent}66`, color: C.accent,
+                borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+              }}>השתמש</button>
+            )}
+          </div>
+        )}
 
         <div style={{ marginBottom: 14 }}>
           <div style={{ color: C.muted, fontSize: 11, marginBottom: 7, letterSpacing: 0.5 }}>תוצאה</div>
@@ -315,7 +367,9 @@ export default function PostTrade({ data, save, showToast }) {
             </div>
             {slPips !== null && slPips > 0 && (
               <div style={{ color: C.muted, fontSize: 11, marginTop: 10, textAlign: 'center' }}>
-                סטופ {slPips.toFixed(0)} פיפס · יצא {(pips / slPips).toFixed(2)}R
+                סטופ {slPips.toFixed(0)} פיפס
+                {form.tp && spec ? ` · תכננת ${(Math.abs(parseFloat(form.tp) - parseFloat(form.entry)) / spec.pip / slPips).toFixed(2)}R` : ''}
+                {' · יצא '}<b style={{ color: pips / slPips >= 0 ? C.green : C.red }}>{(pips / slPips).toFixed(2)}R</b>
                 {grossTyped !== null && grossCalc !== null &&
                   Math.abs(grossTyped - grossCalc) >= 0.01 &&
                   ` · פער מהחישוב לפי פיפס: ${money(grossTyped - grossCalc)}`}
