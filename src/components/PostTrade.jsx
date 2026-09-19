@@ -4,6 +4,8 @@ import { Card, SectionTitle, Check, Input, Select, Textarea, ScoreSlider, Btn, S
 import { PAIRS as PAIR_SPECS, pipValueOf } from '../pairs';
 import { computeBalance } from '../accountBalance';
 import LossReasonPicker from './LossReasonPicker';
+import { rContext } from '../rMultiple';
+import { reasonById } from '../lossReasons';
 
 const PAIRS = ['GBPJPY', 'EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'EURJPY', 'אחר'];
 
@@ -171,6 +173,7 @@ export default function PostTrade({ data, save, showToast }) {
   };
 
   const recentTrades = [...data.trades].reverse().slice(0, 6);
+  const RC = rContext(data.trades || []);
 
   return (
     <div>
@@ -390,10 +393,27 @@ export default function PostTrade({ data, save, showToast }) {
                 {t.violatedRule && <span style={{ color: C.red, fontSize: 10 }}>⚠️ חריגה</span>}
               </div>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <span style={{ color: C.muted, fontSize: 12 }}>🎯 {t.disciplineScore}/10</span>
-                <span style={{ color: t.pips > 0 ? C.green : t.pips < 0 ? C.red : C.muted, fontWeight: 700, fontSize: 17 }}>
-                  {t.pips > 0 ? '+' : ''}{t.pips}p
-                </span>
+                {typeof t.disciplineScore === 'number' && (
+                  <span style={{ color: C.muted, fontSize: 12 }}>🎯 {t.disciplineScore}/10</span>
+                )}
+                {t.lossReason && (() => {
+                  const r = reasonById(t.lossReason);
+                  return r ? (
+                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 5,
+                      color: r.error ? C.red : C.green,
+                      background: (r.error ? C.red : C.green) + '18', whiteSpace: 'nowrap' }}>
+                      {r.short}
+                    </span>
+                  ) : null;
+                })()}
+                <div style={{ textAlign: 'left', minWidth: 62 }}>
+                  <div style={{ color: RC.value(t) > 0 ? C.green : RC.value(t) < 0 ? C.red : C.muted, fontWeight: 700, fontSize: 17 }}>
+                    {RC.fmt(t)}
+                  </div>
+                  <div style={{ color: C.muted, fontSize: 10 }}>
+                    {t.pips > 0 ? '+' : ''}{t.pips}p
+                  </div>
+                </div>
               </div>
             </div>
           ))}

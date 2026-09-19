@@ -313,8 +313,8 @@ export default function Performance({ data }) {
 
           {estCount > 0 && (
             <div style={{ color: C.muted, fontSize: 11, textAlign: 'center', marginTop: -6, marginBottom: 14, lineHeight: 1.6 }}>
-              ל-{estCount} מתוך {total} עסקאות אין SL שמור — ה-R שלהן מוערך לפי חציון סטופ
-              של {R.fallbackSl.toFixed(0)} פיפס ומסומן ב-~
+              ל-{estCount} מתוך {total} עסקאות אין Entry ו-SL שמורים, ולכן הן לא נספרות ב-R
+              ומוצגות בפיפס. סכומי ה-R מסומנים ב-*
             </div>
           )}
 
