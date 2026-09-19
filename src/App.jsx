@@ -13,6 +13,7 @@ import AIAnalysis  from './components/AIAnalysis';
 import AnalysisTab from './AnalysisTab';
 import RiskCalculator from './RiskCalculator';
 import SettingsScreen from './SettingsScreen';
+import { weekStatus, rContext, fmtR } from './rMultiple';
 
 const TABS = [
   { id: 'pre',      icon: '📋', label: 'לפני' },
@@ -28,6 +29,8 @@ const TABS = [
 ];
 
 const DEFAULT_SETTINGS = {
+  maxTradesPerWeek: 5,
+  maxLossesPerWeek: 3,
   riskPct: 1,
   usdjpy: 155,
   commissionPerLot: 7,
@@ -102,7 +105,13 @@ export default function App() {
   const weekStart = getWeekStart();
   const weekTrades = data.trades.filter(t => new Date(t.date) >= weekStart);
   const weekPips   = weekTrades.reduce((s, t) => s + (t.pips || 0), 0);
-  const weekStopped = weekPips >= 100;
+
+  // חוקי השבוע: מקסימום 5 עסקאות, עצירה ב-3 הפסדים
+  const R = rContext(data.trades);
+  const wk = weekStatus(data, settings);
+  const weekStopped = wk.stopped;
+  const totalR = R.sum(data.trades);
+  const estCount = R.estimatedCount(data.trades);
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const dayTrades = data.trades.filter(t => t.date === todayStr);
@@ -114,7 +123,6 @@ export default function App() {
   const totalTrades = data.trades.length;
   const wins = data.trades.filter(t => t.result === 'win').length;
   const winRate = totalTrades > 0 ? Math.round((wins / totalTrades) * 100) : 0;
-  const allPips = data.trades.reduce((s, t) => s + (t.pips || 0), 0);
   const scored = data.trades.filter(t => typeof t.disciplineScore === 'number');
   const avgDisc = scored.length > 0
     ? (scored.reduce((s, t) => s + t.disciplineScore, 0) / scored.length).toFixed(1)
@@ -148,8 +156,8 @@ export default function App() {
                 </div>
               )}
               {weekStopped && !isCooldown && (
-                <div style={{ background: C.green + '22', border: `1px solid ${C.green}44`, borderRadius: 8, padding: '5px 10px', color: C.green, fontSize: 11, fontWeight: 700 }}>
-                  ✅ 100p הושגו
+                <div style={{ background: C.red + '22', border: `1px solid ${C.red}44`, borderRadius: 8, padding: '5px 10px', color: C.red, fontSize: 11, fontWeight: 700 }}>
+                  🚫 שבוע נסגר
                 </div>
               )}
             </div>
@@ -160,10 +168,12 @@ export default function App() {
             {[
               { label: 'Streak 🔥', value: streak > 0 ? `${streak}d` : '—', color: streak >= 5 ? C.green : C.text },
               { label: '🎯 משמעת', value: avgDisc, color: C.accent },
-              { label: 'סה״כ פיפס', value: allPips >= 0 ? `${allPips.toFixed(0)}+` : allPips.toFixed(0), color: allPips >= 0 ? C.green : C.red },
+              { label: 'סה״כ R', value: fmtR(totalR, 1, estCount > 0), color: totalR >= 0 ? C.green : C.red },
+              { label: 'R שבוע', value: fmtR(wk.totalR, 1, wk.estimated > 0), color: wk.totalR >= 0 ? C.green : C.red },
               { label: '%Win', value: `${winRate}%`, color: C.blue },
               { label: 'Setups היום', value: `${daySetups}/2`, color: daySetups >= 2 ? C.red : C.text },
-              { label: 'פיפס שבוע', value: `${weekPips.toFixed(0)}/100`, color: weekStopped ? C.red : weekPips > 60 ? C.warn : C.green },
+              { label: 'עסקאות שבוע', value: `${wk.used}/${wk.maxTrades}`, color: wk.used >= wk.maxTrades ? C.red : wk.used === wk.maxTrades - 1 ? C.warn : C.green },
+              { label: 'הפסדים שבוע', value: `${wk.losses}/${wk.maxLosses}`, color: wk.losses >= wk.maxLosses ? C.red : wk.losses === wk.maxLosses - 1 ? C.warn : C.text },
             ].map(s => (
               <div key={s.label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 9, padding: '8px 12px', textAlign: 'center', minWidth: 70, flexShrink: 0 }}>
                 <div style={{ color: s.color, fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>{s.value}</div>

@@ -5,6 +5,8 @@ import {
 } from "recharts";
 import { sessionOf, SESSIONS } from "./sessions";
 import { grossOf, costsOf, netOf, buildBalanceSeries, computeBalance } from "./accountBalance";
+import { rContext, fmtR } from "./rMultiple";
+import { summarizeLosses } from "./lossReasons";
 
 /* ------------------------------------------------------------------
    AnalysisTab — טאב "ניתוח" (שבועי / חודשי)
@@ -66,6 +68,7 @@ export default function AnalysisTab({ trades = DEMO_TRADES, events = DEMO_EVENTS
   const C = { ...FALLBACK_THEME, ...(theme || {}) };
   SETTINGS = settings || {};
   const growth = useMemo(() => buildBalanceSeries(events, trades, settings || {}), [events, trades, settings]);
+  const RC = useMemo(() => rContext(trades), [trades]);
   const acct = useMemo(() => computeBalance(events, trades, settings || {}), [events, trades, settings]);
   const [mode, setMode] = useState("month"); // week | month
   const [idx, setIdx] = useState(0);         // 0 = התקופה האחרונה
@@ -92,6 +95,8 @@ export default function AnalysisTab({ trades = DEMO_TRADES, events = DEMO_EVENTS
       : `${heMonths[+activeKey.slice(5, 7) - 1]} ${activeKey.slice(0, 4)}`;
 
   const S = useMemo(() => computeStats(inPeriod, all), [inPeriod, all]);
+  const LS = useMemo(() => summarizeLosses(inPeriod, RC), [inPeriod, RC]);
+  const LSall = useMemo(() => summarizeLosses(all, RC), [all, RC]);
 
   /* ---------- סגנונות ---------- */
   const card = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14 };
@@ -332,6 +337,71 @@ export default function AnalysisTab({ trades = DEMO_TRADES, events = DEMO_EVENTS
           <b style={{ color: acct.tradingPnl >= 0 ? C.green : C.red }}>{usd(acct.tradingPnl)}</b>
           {acct.netDeposited > 0 && ` · תשואה של ${(acct.tradingPnl / acct.netDeposited * 100).toFixed(1)}% על ההון`}
         </div>
+      </div>
+
+      {/* מאיפה ההפסדים */}
+      <div style={card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
+          <span style={h}>מאיפה ההפסדים</span>
+          <span style={sub}>{LS.losses} הפסדים בתקופה</span>
+        </div>
+
+        {LS.tagged === 0 ? (
+          <div style={{ ...sub, lineHeight: 1.7, marginTop: 8 }}>
+            אף הפסד בתקופה הזו לא תויג עדיין. בסגירת עסקה מפסידה תתבקש לבחור סיבה,
+            ואפשר להשלים הפסדים ישנים דרך טאב היסטוריה.
+          </div>
+        ) : (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, margin: "10px 0 14px" }}>
+              <div style={{ background: C.green + "12", border: `1px solid ${C.green}33`, borderRadius: 10, padding: "10px 12px" }}>
+                <div style={{ fontSize: 11, color: C.muted }}>הפסדים תקינים</div>
+                <div style={{ fontSize: 19, fontWeight: 800, color: C.green }}>{LS.cleanCount}</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{fmtR(LS.cleanR, 1)}</div>
+              </div>
+              <div style={{ background: C.red + "12", border: `1px solid ${C.red}33`, borderRadius: 10, padding: "10px 12px" }}>
+                <div style={{ fontSize: 11, color: C.muted }}>טעויות</div>
+                <div style={{ fontSize: 19, fontWeight: 800, color: C.red }}>{LS.errorCount}</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{fmtR(LS.errorR, 1)}</div>
+              </div>
+            </div>
+
+            {LS.rows.map((r) => {
+              const worst = Math.abs(LS.rows[0]?.totalR || 1);
+              const pct = Math.min(100, (Math.abs(r.totalR) / worst) * 100);
+              const col = r.error ? C.red : C.green;
+              return (
+                <div key={r.id} style={{ marginBottom: 11 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 4 }}>
+                    <span>{r.label} <span style={{ color: C.muted }}>({r.count})</span></span>
+                    <b style={{ color: col }}>{fmtR(r.totalR, 1)}</b>
+                  </div>
+                  <div style={{ height: 6, background: C.border, borderRadius: 4, overflow: "hidden" }}>
+                    <div style={{ width: `${pct}%`, height: "100%", background: col, borderRadius: 4 }} />
+                  </div>
+                </div>
+              );
+            })}
+
+            {LS.errorR < 0 && (
+              <div style={{ marginTop: 12, fontSize: 12.5, color: C.muted, lineHeight: 1.8,
+                background: C.bg, padding: "10px 12px", borderRadius: 10 }}>
+                בלי הטעויות התקופה נסגרת על{" "}
+                <b style={{ color: (S.netPips / (RC.fallbackSl || 35)) - LS.errorR >= 0 ? C.green : C.red }}>
+                  {fmtR(RC.sum(inPeriod) - LS.errorR, 1)}
+                </b>{" "}
+                במקום {fmtR(RC.sum(inPeriod), 1)}.
+              </div>
+            )}
+
+            {LS.untagged > 0 && (
+              <div style={{ ...sub, marginTop: 10 }}>
+                {LS.untagged} הפסדים בתקופה עוד לא תויגו — הם לא נספרים כאן.
+                {LSall.untagged > LS.untagged && ` (${LSall.untagged} בסך הכל)`}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* תובנות */}
