@@ -100,6 +100,36 @@ export const fmtR = (v, digits = 2, partial = false) =>
     : `${v > 0 ? '+' : ''}${v.toFixed(digits)}R${partial ? '*' : ''}`;
 
 /* ------------------------------------------------------------------
+   בדיקת תקינות הרמות
+   Long : SL מתחת לכניסה, TP מעליה
+   Short: SL מעל הכניסה, TP מתחתיה
+   ------------------------------------------------------------------ */
+export function validateLevels({ entry, sl, tp, direction }) {
+  const e = num(entry), s = num(sl), p = num(tp);
+  const long = !String(direction || 'long').toLowerCase().startsWith('s');
+  const errors = [];
+
+  if (e !== null && s !== null && e !== s) {
+    if (long && s > e) errors.push('בעסקת Long הסטופ חייב להיות מתחת למחיר הכניסה. נראה שהזנת כאן את מחיר היציאה.');
+    if (!long && s < e) errors.push('בעסקת Short הסטופ חייב להיות מעל מחיר הכניסה. נראה שהזנת כאן את מחיר היציאה.');
+  }
+  if (e !== null && p !== null && e !== p) {
+    if (long && p < e) errors.push('בעסקת Long המטרה חייבת להיות מעל מחיר הכניסה.');
+    if (!long && p > e) errors.push('בעסקת Short המטרה חייבת להיות מתחת למחיר הכניסה.');
+  }
+  return errors;
+}
+
+/** פיפס בפועל ממחיר כניסה ויציאה */
+export function pipsFromExit({ entry, exitPrice, direction, pair }) {
+  const e = num(entry), x = num(exitPrice);
+  if (e === null || x === null) return null;
+  const long = !String(direction || 'long').toLowerCase().startsWith('s');
+  const raw = long ? x - e : e - x;
+  return +(raw / pipSize(pair)).toFixed(1);
+}
+
+/* ------------------------------------------------------------------
    סיכומים
    ------------------------------------------------------------------ */
 export function summarizeR(trades = [], R) {

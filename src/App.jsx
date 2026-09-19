@@ -144,10 +144,36 @@ export default function App() {
       <div style={{ background: `linear-gradient(180deg, #0d0d1a 0%, ${C.bg} 100%)`, borderBottom: `1px solid ${C.border}`, padding: '20px 16px 0' }}>
         <div style={{ maxWidth: 640, margin: '0 auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <div>
-              <div style={{ color: C.accent, fontSize: 10, letterSpacing: 3, fontWeight: 700, marginBottom: 3 }}>מסחר • משמעת • 30 יום</div>
-              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: C.text, letterSpacing: -0.3 }}>יומן המשמעת</h1>
-              {syncing && <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>מסנכרן...</div>}
+            <div dir="ltr" style={{ textAlign: 'right' }}>
+              <div style={{
+                color: C.accent, fontSize: 9, fontWeight: 600,
+                letterSpacing: '0.46em', marginBottom: 1, opacity: 0.75,
+                fontFamily: "-apple-system, 'SF Pro Display', system-ui, 'Segoe UI', sans-serif",
+              }}>
+                TRADING
+              </div>
+              <h1 style={{
+                margin: 0,
+                fontSize: 'clamp(26px, 8vw, 34px)',
+                fontWeight: 800,
+                letterSpacing: '-0.02em',
+                lineHeight: 0.95,
+                fontFamily: "-apple-system, 'SF Pro Display', system-ui, 'Segoe UI', sans-serif",
+                background: `linear-gradient(120deg, ${C.accentDim} 0%, ${C.accent} 38%, #f3e3ba 62%, ${C.accent} 100%)`,
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                color: C.accent,
+              }}>
+                JOURNAL
+              </h1>
+              <div style={{
+                height: 2, width: 46, marginTop: 7, borderRadius: 2,
+                background: `linear-gradient(90deg, ${C.accent}, transparent)`,
+              }} />
+              {syncing && (
+                <div dir="rtl" style={{ color: C.muted, fontSize: 11, marginTop: 5 }}>מסנכרן...</div>
+              )}
             </div>
             <div>
               {isCooldown && (
