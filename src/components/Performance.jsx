@@ -44,8 +44,9 @@ function CalendarView({ trades, dailyLogs, R }) {
     const ts = tradesByDate[dateStr] || [];
     const log = logsByDate[dateStr];
     if (ts.length > 0) {
-      const r = ts.reduce((s, t) => s + R.value(t), 0);
-      return r > 0 ? C.green : r < 0 ? C.red : C.muted;
+      const c = R.coverage(ts);
+      const v = c.withR ? c.r : ts.reduce((s, t) => s + (parseFloat(t.pips) || 0), 0);
+      return v > 0 ? C.green : v < 0 ? C.red : C.muted;
     }
     // Daily log only — always blue, never red
     if (log) return C.blue;
@@ -81,8 +82,9 @@ function CalendarView({ trades, dailyLogs, R }) {
           const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
           const color = getDayColor(dateStr);
           const ts = tradesByDate[dateStr] || [];
-          const rSum = ts.reduce((s, t) => s + R.value(t), 0);
-          const rEst = ts.some(t => R.of(t).estimated);
+          const dayCov = R.coverage(ts);
+          const rSum = dayCov.r;
+          const dayPips = ts.reduce((s, t) => s + (parseFloat(t.pips) || 0), 0);
           const isToday = dateStr === new Date().toISOString().slice(0, 10);
 
           return (
@@ -95,8 +97,8 @@ function CalendarView({ trades, dailyLogs, R }) {
             }}>
               <div style={{ color: isToday ? C.accent : C.text, fontSize: 12, fontWeight: isToday ? 700 : 400 }}>{day}</div>
               {ts.length > 0 && (
-                <div style={{ color: rSum > 0 ? C.green : C.red, fontSize: 9, fontWeight: 600 }}>
-                  {fmtR(rSum, 1, rEst)}
+                <div style={{ color: (dayCov.withR ? rSum : dayPips) > 0 ? C.green : C.red, fontSize: 9, fontWeight: 600 }}>
+                  {dayCov.withR ? fmtR(rSum, 1, !dayCov.complete) : `${dayPips > 0 ? '+' : ''}${dayPips.toFixed(0)}p`}
                 </div>
               )}
             </div>
@@ -193,20 +195,24 @@ export default function Performance({ data }) {
   const losses = trades.filter(t => t.result === 'loss').length;
   const bes = trades.filter(t => t.result === 'be').length;
   const R = rContext(trades);
-  const estCount = R.estimatedCount(trades);
-  const totalR = R.sum(trades);
+  const cov = R.coverage(trades);
+  const estCount = cov.count - cov.withR;
+  const totalR = cov.r;
   const winRate = ((wins / total) * 100).toFixed(0);
   const scored = trades.filter(t => typeof t.disciplineScore === 'number');
   const avgDisc = scored.length
     ? (scored.reduce((s, t) => s + t.disciplineScore, 0) / scored.length).toFixed(1) : '—';
 
-  const winR = trades.filter(t => R.value(t) > 0).reduce((s, t) => s + R.value(t), 0);
-  const lossR = Math.abs(trades.filter(t => R.value(t) < 0).reduce((s, t) => s + R.value(t), 0));
-  const avgWin = wins > 0 ? (winR / wins).toFixed(2) : '0.00';
-  const avgLoss = losses > 0 ? (lossR / losses).toFixed(2) : '0.00';
+  const withR = trades.filter(t => R.hasR(t));
+  const rWins = withR.filter(t => R.value(t) > 0);
+  const rLosses = withR.filter(t => R.value(t) < 0);
+  const winR = rWins.reduce((s, t) => s + R.value(t), 0);
+  const lossR = Math.abs(rLosses.reduce((s, t) => s + R.value(t), 0));
+  const avgWin = rWins.length ? (winR / rWins.length).toFixed(2) : '0.00';
+  const avgLoss = rLosses.length ? (lossR / rLosses.length).toFixed(2) : '0.00';
   const profitFactor = lossR > 0 ? (winR / lossR).toFixed(2) : '∞';
   const rrRatio = parseFloat(avgLoss) > 0 ? (avgWin / avgLoss).toFixed(2) : '∞';
-  const expectancy = total > 0 ? (totalR / total).toFixed(2) : '0.00';
+  const expectancy = withR.length ? (totalR / withR.length).toFixed(2) : '0.00';
 
   // ── R-Multiple ────────────────────────────────────────────
   const rMultiples = trades.map(t => parseFloat(R.value(t).toFixed(2)));
@@ -318,9 +324,18 @@ export default function Performance({ data }) {
           </div>
 
           {estCount > 0 && (
-            <div style={{ color: C.muted, fontSize: 11, textAlign: 'center', marginTop: -6, marginBottom: 14, lineHeight: 1.6 }}>
-              ל-{estCount} מתוך {total} עסקאות אין Entry ו-SL שמורים, ולכן הן לא נספרות ב-R
-              ומוצגות בפיפס. סכומי ה-R מסומנים ב-*
+            <div style={{ background: C.warn + '12', border: `1px solid ${C.warn}33`, borderRadius: 10,
+              padding: '11px 13px', marginTop: -4, marginBottom: 16, lineHeight: 1.75, fontSize: 12 }}>
+              <div style={{ color: C.warn, fontWeight: 600, marginBottom: 3 }}>
+                ה-R מחושב על {cov.withR} מתוך {total} עסקאות
+              </div>
+              <div style={{ color: C.muted }}>
+                ל-{estCount} עסקאות אין Entry ו-SL שמורים, ולכן הן לא נספרות ב-R כלל —
+                לא כרווח ולא כהפסד. סך הפיפס על כל {total} העסקאות הוא{' '}
+                <b style={{ color: cov.totalPips >= 0 ? C.green : C.red }}>
+                  {cov.totalPips > 0 ? '+' : ''}{cov.totalPips.toFixed(0)}p
+                </b>. עד שתשלים את הסטופים, הפיפס הוא המדד השלם ו-R הוא חלקי.
+              </div>
             </div>
           )}
 
@@ -426,9 +441,10 @@ export default function Performance({ data }) {
               const byMonth = {};
               trades.forEach(t => {
                 const m = pnlDate(t).slice(0, 7);
-                if (!byMonth[m]) byMonth[m] = { month: m, r: 0, count: 0, wins: 0, est: 0 };
-                byMonth[m].r += R.value(t);
-                if (R.of(t).estimated) byMonth[m].est++;
+                if (!byMonth[m]) byMonth[m] = { month: m, r: 0, count: 0, wins: 0, est: 0, withR: 0, pips: 0 };
+                byMonth[m].pips += (parseFloat(t.pips) || 0);
+                if (R.hasR(t)) { byMonth[m].r += R.value(t); byMonth[m].withR++; }
+                else byMonth[m].est++;
                 byMonth[m].count++;
                 if (t.result === 'win') byMonth[m].wins++;
               });
@@ -436,9 +452,27 @@ export default function Performance({ data }) {
                 <div key={m.month} style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                     <span style={{ color: C.text, fontSize: 15, fontWeight: 700 }}>{m.month}</span>
-                    <span style={{ color: m.r >= 0 ? C.green : C.red, fontWeight: 700, fontSize: 20 }}>
-                      {fmtR(m.r, 1, m.est > 0)}
-                    </span>
+                    <div style={{ textAlign: 'left' }}>
+                      {m.withR > 0 ? (
+                        <>
+                          <span style={{ color: m.r >= 0 ? C.green : C.red, fontWeight: 700, fontSize: 20 }}>
+                            {fmtR(m.r, 1)}
+                          </span>
+                          {m.est > 0 && (
+                            <div style={{ color: C.muted, fontSize: 10 }}>
+                              על {m.withR}/{m.count} עסקאות
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ color: m.pips >= 0 ? C.green : C.red, fontWeight: 700, fontSize: 20 }}>
+                            {m.pips > 0 ? '+' : ''}{m.pips.toFixed(0)}p
+                          </span>
+                          <div style={{ color: C.muted, fontSize: 10 }}>אין נתוני R</div>
+                        </>
+                      )}
+                    </div>
                   </div>
                   <div style={{ display: 'flex', gap: 16 }}>
                     <span style={{ color: C.muted, fontSize: 13 }}>{m.count} עסקאות</span>

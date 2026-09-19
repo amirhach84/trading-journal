@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { C } from '../theme';
 import { Card, SectionTitle, Input, Textarea, ScoreSlider, SegmentedControl } from './UI';
-import { rContext, fmtR, validateLevels } from '../rMultiple';
+import { rContext, fmtR, validateLevels, tradesNeedingFix } from '../rMultiple';
 import LossReasonPicker from './LossReasonPicker';
 import { reasonById } from '../lossReasons';
 
@@ -220,7 +220,44 @@ export default function History({ data, save, showToast }) {
   const trades = data.trades || [];
 
   const R = rContext(data.trades || []);
+  const needFix = tradesNeedingFix(data.trades || []);
   const dailyLogs = data.dailyLogs || [];
+
+  const FixList = () => {
+    if (!needFix.length) return null;
+    return (
+      <Card style={{ borderColor: C.warn + '55', background: '#16120a' }}>
+        <SectionTitle>עסקאות שה-R שלהן לא אמין</SectionTitle>
+        <div style={{ color: C.muted, fontSize: 12.5, lineHeight: 1.8, marginBottom: 14 }}>
+          {needFix.length} עסקאות שבהן מרחק הסטופ לא יכול להיות נכון, ולכן הן לא
+          נספרות ב-R. כמעט כולן רווחיות — לכן סיכומי ה-R נראים גרועים ממה שהיה בפועל.
+          <br />הזן בכל אחת את <b style={{ color: C.text }}>מרחק הסטופ המתוכנן</b>, והעבר
+          את המחיר שהיה שם לשדה מחיר היציאה.
+        </div>
+        {needFix.map(({ trade, issues }) => (
+          <div key={trade.id} style={{ padding: '11px 0', borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+              <div style={{ minWidth: 0 }}>
+                <span style={{ color: C.text, fontSize: 13.5, fontWeight: 600 }}>{trade.date}</span>
+                <span style={{ color: C.muted, fontSize: 12, marginRight: 8 }}>{trade.pair}</span>
+                <span style={{ color: trade.pips > 0 ? C.green : C.red, fontSize: 12.5, fontWeight: 600 }}>
+                  {trade.pips > 0 ? '+' : ''}{trade.pips}p
+                </span>
+              </div>
+              <button onClick={() => { setEditing(trade); setEditingType('trade'); }} style={{
+                background: C.warn + '18', border: `1px solid ${C.warn}66`, color: C.warn,
+                borderRadius: 8, padding: '6px 13px', fontSize: 12, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+              }}>תקן</button>
+            </div>
+            <div style={{ color: C.warn, fontSize: 11.5, marginTop: 5, lineHeight: 1.6 }}>
+              {issues.join(' · ')}
+            </div>
+          </div>
+        ))}
+      </Card>
+    );
+  };
 
   const allEntries = [
     ...trades.map(t => ({ ...t, _type: 'trade' })),
@@ -280,6 +317,8 @@ export default function History({ data, save, showToast }) {
           onClose={() => setEditing(null)}
         />
       )}
+
+      <FixList />
 
       {/* Open trades */}
       {openTrades.length > 0 && (

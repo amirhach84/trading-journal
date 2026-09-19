@@ -47,7 +47,8 @@ export default function Weekly({ data, save, showToast, weekTrades, weekPips, we
       <Card style={{ background: 'linear-gradient(135deg, #0d0d1a, #0a0d16)', borderColor: C.blue + '44' }}>
         <SectionTitle>סטטוס שבוע נוכחי</SectionTitle>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
-          <StatBox label="R השבוע" value={fmtR(wk.totalR, 2, wk.estimated > 0)} color={rColor} />
+          <StatBox label="R השבוע" value={fmtR(wk.totalR, 2)} color={rColor}
+            sub={wk.estimated > 0 ? `על ${wk.trades.length - wk.estimated}/${wk.trades.length}` : undefined} />
           <StatBox label="עסקאות" value={wk.used} unit={`/${wk.maxTrades}`}
             color={wk.used >= wk.maxTrades ? C.red : wk.used === wk.maxTrades - 1 ? C.warn : C.accent} />
           <StatBox label="הפסדים" value={wk.losses} unit={`/${wk.maxLosses}`}
