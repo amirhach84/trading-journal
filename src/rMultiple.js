@@ -10,6 +10,15 @@
    והתצוגה נופלת לפיפס.
    ------------------------------------------------------------------ */
 
+/**
+ * מאיזה תאריך R הוא מדד אמין.
+ * לפני כן לא נשמרו סטופים מתוכננים ולא היה שדה מחיר יציאה,
+ * ולכן כל העסקאות הישנות נמדדות בפיפס בלבד.
+ */
+export const R_START = '2026-09-01';
+
+export const isLegacy = (t) => !t || !t.date || t.date < R_START;
+
 const PIP = { GBPJPY: 0.01, GBPUSD: 0.0001, EURUSD: 0.0001, USDJPY: 0.01, EURJPY: 0.01, XAUUSD: 0.1 };
 
 const num = (v) => {
@@ -66,12 +75,13 @@ export function rOf(t) {
  */
 export function rContext() {
   const of = (t) => {
+    // עסקאות מלפני R_START נמדדות בפיפס בלבד
+    if (isLegacy(t)) return { value: 0, hasR: false, legacy: true, issues: [], planned: null };
     const r = rOf(t);
-    if (r === null) return { value: 0, hasR: false, issues: dataIssues(t), planned: plannedRR(t) };
+    if (r === null) return { value: 0, hasR: false, legacy: false, issues: dataIssues(t), planned: plannedRR(t) };
     const issues = dataIssues(t);
-    // R שנובע מנתון שגוי לא נכנס לסכומים
-    if (issues.length) return { value: 0, hasR: false, issues, planned: plannedRR(t) };
-    return { value: r, hasR: true, issues: [], planned: plannedRR(t) };
+    if (issues.length) return { value: 0, hasR: false, legacy: false, issues, planned: plannedRR(t) };
+    return { value: r, hasR: true, legacy: false, issues: [], planned: plannedRR(t) };
   };
 
   return {
@@ -88,18 +98,26 @@ export function rContext() {
       }
       return `${value > 0 ? '+' : ''}${value.toFixed(digits)}R`;
     },
-    /** כמה עסקאות ברשימה חסרות SL */
-    missingCount: (list) => list.filter((t) => !of(t).hasR).length,
-    estimatedCount: (list) => list.filter((t) => !of(t).hasR).length,
+    /** עסקאות מהתקופה החדשה שעדיין אין להן R תקין */
+    missingCount: (list) => list.filter((t) => !of(t).hasR && !of(t).legacy).length,
+    estimatedCount: (list) => list.filter((t) => !of(t).hasR && !of(t).legacy).length,
+    legacyCount: (list) => list.filter((t) => of(t).legacy).length,
     sum: (list) => list.reduce((s, t) => (of(t).hasR ? s + of(t).value : s), 0),
     /** { r, withR, count } — תמיד מחזיר גם את הכיסוי */
     coverage: (list) => {
       const w = list.filter((t) => of(t).hasR);
+      const legacy = list.filter((t) => of(t).legacy);
+      const modern = list.filter((t) => !of(t).legacy);
       return {
         r: w.reduce((s, t) => s + of(t).value, 0),
         withR: w.length,
         count: list.length,
-        complete: w.length === list.length,
+        legacy: legacy.length,
+        modern: modern.length,
+        /** האם כל העסקאות בקבוצה הן מהתקופה הישנה */
+        allLegacy: modern.length === 0,
+        complete: w.length === modern.length && modern.length > 0,
+        pips: list.reduce((a, t) => a + (num(t.pips) || 0), 0),
       };
     },
   };
@@ -167,6 +185,7 @@ export const rTrustworthy = (t) => dataIssues(t).length === 0;
 /** כל העסקאות שדורשות תיקון, עם הסיבות */
 export function tradesNeedingFix(trades = []) {
   return trades
+    .filter((t) => !isLegacy(t))
     .map((t) => ({ trade: t, issues: dataIssues(t) }))
     .filter((x) => x.issues.length > 0);
 }

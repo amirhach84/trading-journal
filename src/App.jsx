@@ -195,8 +195,10 @@ export default function App() {
             {[
               { label: 'Streak 🔥', value: streak > 0 ? `${streak}d` : '—', color: streak >= 5 ? C.green : C.text },
               { label: '🎯 משמעת', value: avgDisc, color: C.accent },
-              { label: estCount > 0 ? `R על ${cov.withR}/${cov.count}` : 'סה״כ R',
-                value: fmtR(totalR, 1), color: totalR >= 0 ? C.green : C.red },
+              { label: 'סה״כ פיפס', value: `${cov.pips > 0 ? '+' : ''}${cov.pips.toFixed(0)}`,
+                color: cov.pips >= 0 ? C.green : C.red },
+              { label: 'סה״כ R', value: cov.withR ? fmtR(totalR, 1) : '—',
+                color: totalR >= 0 ? C.green : C.red },
               { label: 'R שבוע', value: fmtR(wk.totalR, 1, wk.estimated > 0), color: wk.totalR >= 0 ? C.green : C.red },
               { label: '%Win', value: `${winRate}%`, color: C.blue },
               { label: 'Setups היום', value: `${daySetups}/2`, color: daySetups >= 2 ? C.red : C.text },
