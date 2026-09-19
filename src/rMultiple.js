@@ -67,9 +67,11 @@ export function rOf(t) {
 export function rContext() {
   const of = (t) => {
     const r = rOf(t);
-    return r === null
-      ? { value: 0, hasR: false, planned: plannedRR(t) }
-      : { value: r, hasR: true, planned: plannedRR(t) };
+    if (r === null) return { value: 0, hasR: false, issues: dataIssues(t), planned: plannedRR(t) };
+    const issues = dataIssues(t);
+    // R שנובע מנתון שגוי לא נכנס לסכומים
+    if (issues.length) return { value: 0, hasR: false, issues, planned: plannedRR(t) };
+    return { value: r, hasR: true, issues: [], planned: plannedRR(t) };
   };
 
   return {
@@ -89,7 +91,17 @@ export function rContext() {
     /** כמה עסקאות ברשימה חסרות SL */
     missingCount: (list) => list.filter((t) => !of(t).hasR).length,
     estimatedCount: (list) => list.filter((t) => !of(t).hasR).length,
-    sum: (list) => list.reduce((s, t) => s + of(t).value, 0),
+    sum: (list) => list.reduce((s, t) => (of(t).hasR ? s + of(t).value : s), 0),
+    /** { r, withR, count } — תמיד מחזיר גם את הכיסוי */
+    coverage: (list) => {
+      const w = list.filter((t) => of(t).hasR);
+      return {
+        r: w.reduce((s, t) => s + of(t).value, 0),
+        withR: w.length,
+        count: list.length,
+        complete: w.length === list.length,
+      };
+    },
   };
 }
 
@@ -130,11 +142,43 @@ export function pipsFromExit({ entry, exitPrice, direction, pair }) {
 }
 
 /* ------------------------------------------------------------------
+   איכות נתונים — עסקאות שה-R שלהן לא אמין
+   ------------------------------------------------------------------ */
+export const MIN_SANE_SL = 10;     // סטופ קטן מזה כמעט בוודאות שגיאת הזנה
+
+export function dataIssues(t) {
+  const out = [];
+  const sl = slPipsOf(t);
+  const pips = num(t.pips);
+  out.push(...validateLevels(t));
+
+  if (sl && pips !== null) {
+    if (pips > 0 && Math.abs(pips - sl) < 0.6)
+      out.push('עסקה רווחית לא יכולה לצאת במחיר הסטופ — נראה שבשדה ה-SL נשמר מחיר היציאה.');
+    if (sl < MIN_SANE_SL)
+      out.push(`מרחק הסטופ ${sl.toFixed(1)} פיפס בלבד — כמעט בוודאות שגיאת הזנה.`);
+  }
+  return out;
+}
+
+/** האם ה-R של העסקה אמין מספיק להיכנס לסכומים */
+export const rTrustworthy = (t) => dataIssues(t).length === 0;
+
+/** כל העסקאות שדורשות תיקון, עם הסיבות */
+export function tradesNeedingFix(trades = []) {
+  return trades
+    .map((t) => ({ trade: t, issues: dataIssues(t) }))
+    .filter((x) => x.issues.length > 0);
+}
+
+/* ------------------------------------------------------------------
    סיכומים
    ------------------------------------------------------------------ */
 export function summarizeR(trades = [], R) {
   const ctx = R || rContext(trades);
-  const rs = trades.map((t) => ctx.of(t).value);
+  // רק עסקאות שיש להן Entry ו-SL נכנסות לחישוב R
+  const withR = trades.filter((t) => ctx.of(t).hasR);
+  const rs = withR.map((t) => ctx.of(t).value);
   const wins = rs.filter((r) => r > 0);
   const lossesArr = rs.filter((r) => r < 0);
   const grossWin = wins.reduce((a, b) => a + b, 0);
@@ -142,6 +186,12 @@ export function summarizeR(trades = [], R) {
   const totalR = rs.reduce((a, b) => a + b, 0);
   return {
     count: trades.length,
+    withR: withR.length,
+    missing: trades.length - withR.length,
+    /** האם ה-R מכסה את כל העסקאות בקבוצה */
+    complete: withR.length === trades.length,
+    /** סך הפיפס — המדד שכן קיים על כל עסקה */
+    totalPips: trades.reduce((a, t) => a + (num(t.pips) || 0), 0),
     estimated: ctx.estimatedCount(trades),
     totalR,
     avgR: rs.length ? totalR / rs.length : null,

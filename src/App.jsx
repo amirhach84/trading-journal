@@ -110,8 +110,9 @@ export default function App() {
   const R = rContext(data.trades);
   const wk = weekStatus(data, settings);
   const weekStopped = wk.stopped;
-  const totalR = R.sum(data.trades);
-  const estCount = R.estimatedCount(data.trades);
+  const cov = R.coverage(data.trades);
+  const totalR = cov.r;
+  const estCount = cov.count - cov.withR;
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const dayTrades = data.trades.filter(t => t.date === todayStr);
@@ -194,7 +195,8 @@ export default function App() {
             {[
               { label: 'Streak 🔥', value: streak > 0 ? `${streak}d` : '—', color: streak >= 5 ? C.green : C.text },
               { label: '🎯 משמעת', value: avgDisc, color: C.accent },
-              { label: 'סה״כ R', value: fmtR(totalR, 1, estCount > 0), color: totalR >= 0 ? C.green : C.red },
+              { label: estCount > 0 ? `R על ${cov.withR}/${cov.count}` : 'סה״כ R',
+                value: fmtR(totalR, 1), color: totalR >= 0 ? C.green : C.red },
               { label: 'R שבוע', value: fmtR(wk.totalR, 1, wk.estimated > 0), color: wk.totalR >= 0 ? C.green : C.red },
               { label: '%Win', value: `${winRate}%`, color: C.blue },
               { label: 'Setups היום', value: `${daySetups}/2`, color: daySetups >= 2 ? C.red : C.text },
