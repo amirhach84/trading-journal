@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { C } from '../theme';
 import { Card, SectionTitle, Input, Textarea, ScoreSlider, SegmentedControl } from './UI';
-import { rContext, fmtR, validateLevels, tradesNeedingFix, R_START } from '../rMultiple';
+import { rContext, validateLevels, tradesNeedingFix, R_START } from '../rMultiple';
 import LossReasonPicker from './LossReasonPicker';
 import { reasonById } from '../lossReasons';
 

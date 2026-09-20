@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { C, PIE_COLORS } from '../theme';
 import { Card, SectionTitle, StatBox } from './UI';
-import { rContext, fmtR, R_START, isLegacy } from '../rMultiple';
+import { rContext, fmtR, R_START } from '../rMultiple';
 
 // רווח והפסד מיוחסים ליום הסגירה; ספירת עסקאות ליום נשארת על יום הכניסה
 const pnlDate = (t) => t.closeDate || t.date;
@@ -212,7 +212,6 @@ export default function Performance({ data }) {
   const avgLoss = rLosses.length ? (lossR / rLosses.length).toFixed(2) : '0.00';
   const profitFactor = lossR > 0 ? (winR / lossR).toFixed(2) : '∞';
   const rrRatio = parseFloat(avgLoss) > 0 ? (avgWin / avgLoss).toFixed(2) : '∞';
-  const expectancy = withR.length ? (totalR / withR.length).toFixed(2) : '0.00';
 
   // ── R-Multiple ────────────────────────────────────────────
   const rMultiples = trades.map(t => parseFloat(R.value(t).toFixed(2)));
