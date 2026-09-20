@@ -112,7 +112,6 @@ export default function App() {
   const weekStopped = wk.stopped;
   const cov = R.coverage(data.trades);
   const totalR = cov.r;
-  const estCount = cov.count - cov.withR;
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const dayTrades = data.trades.filter(t => t.date === todayStr);
