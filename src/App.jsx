@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { C } from './theme';
 import { loadData, saveData, loadLocal } from './storage';
 import { Toast } from './components/UI';
+import Dashboard   from './components/Dashboard';
 import PreTrade    from './components/PreTrade';
 import PostTrade   from './components/PostTrade';
 import Weekly      from './components/Weekly';
@@ -16,6 +17,7 @@ import SettingsScreen from './SettingsScreen';
 import { weekStatus, rContext, fmtR } from './rMultiple';
 
 const TABS = [
+  { id: 'dash',     icon: '📊', label: 'דאשבורד' },
   { id: 'pre',      icon: '📋', label: 'לפני' },
   { id: 'post',     icon: '📝', label: 'אחרי' },
   { id: 'daily',    icon: '🎯', label: 'משמעת' },
@@ -46,7 +48,7 @@ function getWeekStart() {
 
 export default function App() {
   const [data, setData] = useState(null);
-  const [tab, setTab] = useState('pre');
+  const [tab, setTab] = useState('dash');
   const [toast, setToast] = useState(null);
   const [syncing, setSyncing] = useState(false);
 
@@ -234,6 +236,7 @@ export default function App() {
 
       {/* Content */}
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 16px' }}>
+        {tab === 'dash' && <Dashboard data={data} settings={settings} />}
         {tab === 'pre' && (
           <>
             <RiskCalculator
