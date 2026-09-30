@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { PAIR_LIST } from "./pairs";
 import { EVENT_TYPES, computeBalance, returnOnCapital, costReport, reconcile } from "./accountBalance";
 import BackupPanel from "./BackupPanel";
+import Mt5Import from "./components/Mt5Import";
 
 /* ------------------------------------------------------------------
    SettingsScreen — המקור היחיד לאמת על החשבון.
@@ -250,6 +251,11 @@ export default function SettingsScreen({
           </div>
         )}
       </div>
+
+      {/* ייבוא מ-MT5 */}
+      {data && save && (
+        <Mt5Import data={data} save={save} showToast={showToast || (() => {})} />
+      )}
 
       {/* גיבוי ושחזור */}
       {data && save && (
