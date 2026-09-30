@@ -1,75 +1,51 @@
 import { useState } from 'react';
 import { C } from '../theme';
-import { Card, SectionTitle, Check, Input, Select, Textarea, ScoreSlider, Btn, SegmentedControl } from './UI';
-import { PAIRS as PAIR_SPECS, pipValueOf } from '../pairs';
-import { computeBalance } from '../accountBalance';
+import { Card, SectionTitle, Textarea, ScoreSlider, Btn } from './UI';
 import LossReasonPicker from './LossReasonPicker';
-import { rContext, validateLevels, pipsFromExit } from '../rMultiple';
-import { reasonById } from '../lossReasons';
+import { rContext } from '../rMultiple';
+import { netOf } from '../accountBalance';
 
-const PAIRS = ['GBPJPY', 'EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'EURJPY', 'אחר'];
+/* ------------------------------------------------------------------
+   PostTrade — תיעוד אחרי עסקה
 
-const emptyForm = () => ({
-  date: new Date().toISOString().slice(0, 10),
-  time: '',
-  closeDate: new Date().toISOString().slice(0, 10),
-  closeTime: new Date().toTimeString().slice(0, 5),
-  pair: 'GBPJPY',
-  direction: 'long',
-  setupNum: '1',
-  entry: '',
-  sl: '',
-  tp: '',
-  exitPrice: '',
-  result: 'win',
-  pips: '',
-  lossReason: null,
-  lots: '',
-  swap: '',
-  grossUsd: '',
-  closedByPlan: true,
-  respected2R: true,
-  triedHomeRun: false,
-  changedFromEmotion: false,
-  triedToRecover: false,
-  violatedRule: false,
-  whyEntered: '',
-  feltBefore: '',
-  feltDuring: '',
-  mentalMistake: '',
-  whatGood: '',
-  whatFix: '',
-  disciplineScore: 7,
-  patienceScore: 7,
-  emotionScore: 7,
-  screenshots: ['', '', ''],
-});
+   כל הנתונים המספריים מגיעים מ-MetaTrader דרך מסך הייבוא ואינם
+   ניתנים לעריכה כאן. מה שנשאר ידני: מסקנות, צילומים, ציון משמעת
+   ותגית סיבת הפסד.
+   ------------------------------------------------------------------ */
 
-function TelegramScreenshot({ url, index, onChange }) {
-  const [imgError, setImgError] = useState(false);
-  const isValid = url && url.startsWith('http');
+const usd = (v) => `${v < 0 ? '−' : ''}$${Math.abs(v).toFixed(2)}`;
+const isLossTrade = (t) => t.result === 'loss' || (parseFloat(t.pips) || 0) < 0;
+
+const documented = (t) =>
+  !!(t.conclusions || '').trim() ||
+  (t.screenshots || []).some(Boolean) ||
+  typeof t.disciplineScore === 'number';
+
+function Screenshot({ url, index, onChange }) {
+  const [err, setErr] = useState(false);
+  const ok = url && url.startsWith('http');
   return (
     <div style={{ marginBottom: 12 }}>
       <div style={{ color: C.muted, fontSize: 11, marginBottom: 5, letterSpacing: 0.5 }}>
         📸 {['Entry', 'Exit', 'Multi-TF'][index]}
       </div>
-      <input type="url" value={url} onChange={e => onChange(e.target.value)}
+      <input type="url" value={url} onChange={e => { setErr(false); onChange(e.target.value); }}
         placeholder="הדבק לינק מטלגרם..."
-        style={{ width: '100%', background: '#0d0d16', border: `1px solid ${isValid ? C.accent + '66' : C.border}`, borderRadius: 9, padding: '10px 13px', color: C.text, fontSize: 13, fontFamily: 'inherit', outline: 'none', marginBottom: isValid ? 8 : 0, boxSizing: 'border-box' }}
-      />
-      {isValid && (
+        style={{ width: '100%', background: C.card2,
+          border: `1px solid ${ok ? C.accent + '66' : C.border}`, borderRadius: 9,
+          padding: '10px 13px', color: C.text, fontSize: 13, fontFamily: 'inherit',
+          outline: 'none', boxSizing: 'border-box', marginBottom: ok ? 8 : 0 }} />
+      {ok && (
         <div style={{ borderRadius: 9, overflow: 'hidden', border: `1px solid ${C.border}` }}>
-          {!imgError ? (
-            <img src={url} alt={`screenshot ${index + 1}`} onError={() => setImgError(true)}
+          {!err ? (
+            <img src={url} alt="" onError={() => setErr(true)}
               style={{ width: '100%', maxHeight: 200, objectFit: 'cover', display: 'block' }} />
           ) : (
             <a href={url} target="_blank" rel="noopener noreferrer"
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: C.card2, color: C.accent, textDecoration: 'none', fontSize: 13 }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
+                background: C.card2, color: C.accent, textDecoration: 'none', fontSize: 13 }}>
               <span style={{ fontSize: 20 }}>📷</span>
-              <div>
-                <div style={{ fontWeight: 600 }}>פתח תמונה בטלגרם</div>
-                <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>{url.slice(0, 50)}...</div>
-              </div>
+              <span>פתח בטלגרם</span>
               <span style={{ marginRight: 'auto', color: C.muted }}>↗</span>
             </a>
           )}
@@ -80,399 +56,223 @@ function TelegramScreenshot({ url, index, onChange }) {
 }
 
 export default function PostTrade({ data, save, showToast }) {
-  const [form, setForm] = useState(emptyForm());
-  const [selectedOpenId, setSelectedOpenId] = useState(null);
+  const trades = data.trades || [];
+  const R = rContext();
+  const cfg = data.settings || {};
+
+  const [selId, setSelId] = useState(null);
+  const [onlyOpen, setOnlyOpen] = useState(true);
+  const [form, setForm] = useState(null);
+
+  const sorted = [...trades].sort((a, b) =>
+    String(b.closeDate || b.date).localeCompare(String(a.closeDate || a.date)));
+  const list = (onlyOpen ? sorted.filter(t => !documented(t)) : sorted).slice(0, 30);
+  const sel = trades.find(t => t.id === selId) || null;
+
+  const pick = (t) => {
+    setSelId(t.id);
+    setForm({
+      conclusions: t.conclusions || '',
+      disciplineScore: typeof t.disciplineScore === 'number' ? t.disciplineScore : 7,
+      lossReason: t.lossReason || null,
+      screenshots: [...(t.screenshots || ['', '', ''])],
+    });
+  };
+
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const openTrades = data.openTrades || [];
-  const settings = data.settings || {};
-
-  const selectOpenTrade = (openTrade) => {
-    setSelectedOpenId(openTrade.id);
-    setForm(f => ({
-      ...f,
-      date: openTrade.date,
-      time: openTrade.time || '',
-      pair: openTrade.pair,
-      direction: openTrade.direction,
-      entry: openTrade.entry || '',
-      sl: openTrade.sl || '',
-      tp: openTrade.tp || '',
-      lots: openTrade.lots || f.lots,
-      setupNum: openTrade.setupNum || '1',
-    }));
-  };
-
-  const avgScore = Math.round((form.disciplineScore + form.patienceScore + form.emotionScore) / 3);
-  const avgColor = avgScore >= 7 ? C.green : avgScore >= 5 ? C.warn : C.red;
-
-  // ---- תקינות הרמות ----
-  const levelErrors = validateLevels(form);
-
-  // ---- פיפס ממחיר היציאה ----
-  const autoPips = pipsFromExit({
-    entry: form.entry, exitPrice: form.exitPrice,
-    direction: form.direction, pair: form.pair,
-  });
-
-  // ---- חישובי כסף ----
-  const spec = PAIR_SPECS[form.pair];
-  const pipValue = pipValueOf(form.pair, settings.usdjpy);         // ללוט אחד
-  const lots = parseFloat(form.lots) || 0;
-  const pips = parseFloat(form.pips) || 0;
-  const swap = parseFloat(form.swap) || 0;
-  const commission = lots ? -(lots * (parseFloat(settings.commissionPerLot) || 0)) : 0;
-  const grossTyped = form.grossUsd !== '' && !isNaN(parseFloat(form.grossUsd))
-    ? parseFloat(form.grossUsd) : null;
-  const grossCalc = pipValue && lots ? pips * pipValue * lots : null;
-  const gross = grossTyped !== null ? grossTyped : grossCalc;
-  const net = gross !== null ? gross + commission + swap : null;
-  const slPips = spec && form.entry && form.sl
-    ? Math.abs(parseFloat(form.entry) - parseFloat(form.sl)) / spec.pip
-    : null;
-
-  const money = (v) => (v < 0 ? '−$' : '$') + Math.abs(v).toFixed(2);
-
   const handleSave = () => {
-    if (levelErrors.length) { showToast(levelErrors[0], 'err'); return; }
-    if (!form.pips && form.pips !== 0) { showToast('הזן כמה פיפס', 'err'); return; }
-    const isLoss = form.result === 'loss' || (parseFloat(form.pips) || 0) < 0;
-    if (isLoss && !form.lossReason) { showToast('בחר סיבת הפסד לפני השמירה', 'err'); return; }
-
-    // Always trust the ORIGINAL open trade's date when one is selected —
-    // never let a stale/default form date overwrite it. This is what makes
-    // multi-day held trades count on their entry day, not their close day.
-    const matchedOpen = selectedOpenId
-      ? openTrades.find(t => t.id === selectedOpenId)
-      : null;
-    const entryDate = matchedOpen ? matchedOpen.date : form.date;
-    const entryTime = matchedOpen ? (matchedOpen.time || form.time) : form.time;
-
-    // היתרה לפני העסקה הזו — נשמרת כדי שאחוז הסיכון ההיסטורי לא ישתנה בעתיד
-    const balanceAtEntry = computeBalance(data.accountEvents || [], data.trades, settings).balance;
-
-    const trade = {
-      ...form,
-      date: entryDate,      // force entry-date, overriding any drift in form.date
-      time: entryTime,      // שעת כניסה — מזינה את פילוח הסשנים
-      closeDate: form.closeDate || entryDate,
-      exitPrice: form.exitPrice === '' ? null : parseFloat(form.exitPrice),
-      pips: parseFloat(form.pips) || 0,
-      lots: lots || null,
-      swap,
-      grossUsd: gross !== null ? +gross.toFixed(2) : null,
-      grossFromBroker: grossTyped !== null,
-      pipValueAtEntry: pipValue,
-      usdjpyAtEntry: spec && spec.needsRate ? (parseFloat(settings.usdjpy) || null) : null,
-      slPips: slPips !== null ? +slPips.toFixed(1) : null,
-      balanceAtEntry: +balanceAtEntry.toFixed(2),
-      heldOvernight: (form.closeDate || entryDate) !== entryDate || swap !== 0,
-      savedAt: new Date().toISOString(),
-      id: selectedOpenId || Date.now(),
-      status: 'closed',
-    };
-
-    const remainingOpen = openTrades.filter(t => t.id !== selectedOpenId);
-    let newData = { ...data, trades: [...data.trades, trade], openTrades: remainingOpen };
-
-    if (form.violatedRule) {
-      const cd = new Date(); cd.setHours(cd.getHours() + 48);
-      newData.cooldownUntil = cd.toISOString();
+    if (!sel || !form) return;
+    if (isLossTrade(sel) && !form.lossReason) {
+      showToast('בחר סיבת הפסד לפני השמירה', 'err'); return;
     }
-
-    save(newData);
-    showToast(form.violatedRule ? '⚠️ חריגה — עצירת 48 שעות הופעלה' : '✓ עסקה נשמרה!', form.violatedRule ? 'err' : 'ok');
-    setForm(emptyForm());
-    setSelectedOpenId(null);
+    const next = trades.map(t => t.id === sel.id ? {
+      ...t,
+      conclusions: form.conclusions,
+      disciplineScore: form.disciplineScore,
+      lossReason: form.lossReason,
+      screenshots: form.screenshots,
+      documentedAt: new Date().toISOString(),
+    } : t);
+    save({ ...data, trades: next });
+    showToast('✓ התיעוד נשמר');
+    setSelId(null); setForm(null);
   };
 
-  const recentTrades = [...data.trades].reverse().slice(0, 6);
-  const RC = rContext(data.trades || []);
+  const undocumented = sorted.filter(t => !documented(t)).length;
+
+  /* ---------- בחירת עסקה ---------- */
+  if (!sel) {
+    return (
+      <div>
+        <Card>
+          <SectionTitle>בחר עסקה לתיעוד</SectionTitle>
+          <div style={{ color: C.muted, fontSize: 12.5, lineHeight: 1.85, marginBottom: 14 }}>
+            כל הנתונים המספריים מגיעים מ-MetaTrader.
+            כאן מוסיפים רק מסקנות וצילומים.
+            {undocumented > 0 && (
+              <><br /><b style={{ color: C.warn }}>{undocumented} עסקאות ממתינות לתיעוד.</b></>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: 3, background: C.card2, padding: 3,
+            borderRadius: 9, border: `1px solid ${C.border}`, marginBottom: 14 }}>
+            {[[true, 'ללא תיעוד'], [false, 'הכל']].map(([v, t]) => (
+              <button key={String(v)} onClick={() => setOnlyOpen(v)}
+                style={{ flex: 1, padding: '8px 0', borderRadius: 7, border: 'none',
+                  cursor: 'pointer', fontSize: 12.5, fontWeight: 700, fontFamily: 'inherit',
+                  background: onlyOpen === v ? C.accent : 'transparent',
+                  color: onlyOpen === v ? '#0a0a0f' : C.muted }}>{t}</button>
+            ))}
+          </div>
+
+          {list.length === 0 ? (
+            <div style={{ color: C.muted, fontSize: 13.5, textAlign: 'center', padding: '26px 0' }}>
+              {onlyOpen ? 'כל העסקאות מתועדות. יפה.' : 'אין עסקאות. ייבא מ-MetaTrader בטאב הגדרות.'}
+            </div>
+          ) : list.map(t => {
+            const money = netOf(t, cfg);
+            const r = R.of(t);
+            const done = documented(t);
+            return (
+              <div key={t.id} onClick={() => pick(t)} style={{
+                padding: '12px 13px', marginBottom: 8, borderRadius: 10,
+                border: `1px solid ${done ? C.border : C.accent + '44'}`,
+                background: C.card2, cursor: 'pointer',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span style={{ color: C.text, fontWeight: 700, fontSize: 14 }}>{t.pair}</span>
+                    <span style={{ color: t.direction === 'long' ? C.green : C.red,
+                      fontSize: 12, marginRight: 7 }}>
+                      {t.direction === 'long' ? '▲' : '▼'}
+                    </span>
+                    <span style={{ color: C.muted, fontSize: 12, marginRight: 7 }}>
+                      {t.date}{t.closeDate && t.closeDate !== t.date ? ` → ${t.closeDate}` : ''}
+                    </span>
+                  </div>
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ color: money >= 0 ? C.green : C.red, fontWeight: 700, fontSize: 15 }}>
+                      {usd(money)}
+                    </div>
+                    <div style={{ color: C.muted, fontSize: 10 }}>
+                      {t.pips > 0 ? '+' : ''}{t.pips}p{r.hasR ? ` · ${R.fmt(t)}` : ''}
+                    </div>
+                  </div>
+                </div>
+                {done && (
+                  <div style={{ color: C.green, fontSize: 10.5, marginTop: 6 }}>✓ מתועד</div>
+                )}
+              </div>
+            );
+          })}
+        </Card>
+      </div>
+    );
+  }
+
+  /* ---------- תיעוד העסקה שנבחרה ---------- */
+  const money = netOf(sel, cfg);
+  const r = R.of(sel);
+  const loss = isLossTrade(sel);
+
+  const Row = ({ label, value, color }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 12.5 }}>
+      <span style={{ color: C.muted }}>{label}</span>
+      <span style={{ color: color || C.text, fontWeight: 600 }}>{value}</span>
+    </div>
+  );
 
   return (
     <div>
-      {/* Open trades selector */}
-      {openTrades.length > 0 && (
-        <Card style={{ background: '#0d1a0d', borderColor: C.green + '44' }}>
-          <SectionTitle>בחר עסקה לסגירה</SectionTitle>
-          {openTrades.map(t => (
-            <div key={t.id} onClick={() => selectOpenTrade(t)} style={{
-              padding: '12px 14px', marginBottom: 8, borderRadius: 9,
-              border: `1px solid ${selectedOpenId === t.id ? C.green : C.border}`,
-              background: selectedOpenId === t.id ? C.green + '15' : C.card2,
-              cursor: 'pointer', transition: 'all 0.15s'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <span style={{ color: C.text, fontWeight: 700, fontSize: 15 }}>{t.pair}</span>
-                  <span style={{ color: t.direction === 'long' ? C.green : C.red, fontSize: 12, marginRight: 8 }}>
-                    {t.direction === 'long' ? ' ▲ Long' : ' ▼ Short'}
-                  </span>
-                  <span style={{ color: C.muted, fontSize: 12 }}>{t.date} {t.time}</span>
-                </div>
-                <div style={{ fontSize: 12, color: C.muted, textAlign: 'left' }}>
-                  <div>Entry: {t.entry}</div>
-                  <div>SL: {t.sl} | TP: {t.tp}</div>
-                </div>
-              </div>
-              {selectedOpenId === t.id && (
-                <div style={{ color: C.green, fontSize: 12, marginTop: 6 }}>✓ נבחר — מלא את הפרטים למטה</div>
-              )}
+      {/* נתוני MT5 — לקריאה בלבד */}
+      <Card style={{ borderColor: C.accent + '44' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div>
+            <span style={{ color: C.text, fontSize: 17, fontWeight: 700 }}>{sel.pair}</span>
+            <span style={{ color: sel.direction === 'long' ? C.green : C.red,
+              fontSize: 13, marginRight: 8 }}>
+              {sel.direction === 'long' ? '▲ Long' : '▼ Short'}
+            </span>
+          </div>
+          <button onClick={() => { setSelId(null); setForm(null); }}
+            style={{ background: 'none', border: `1px solid ${C.border}`, color: C.muted,
+              borderRadius: 8, padding: '6px 13px', fontSize: 12, cursor: 'pointer',
+              fontFamily: 'inherit' }}>
+            החלף עסקה
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10,
+          background: C.card2, borderRadius: 10, padding: '12px 10px', marginBottom: 12, textAlign: 'center' }}>
+          <div>
+            <div style={{ color: money >= 0 ? C.green : C.red, fontSize: 19, fontWeight: 800 }}>
+              {usd(money)}
             </div>
-          ))}
+            <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>נטו</div>
+          </div>
+          <div>
+            <div style={{ color: sel.pips >= 0 ? C.green : C.red, fontSize: 19, fontWeight: 800 }}>
+              {sel.pips > 0 ? '+' : ''}{sel.pips}
+            </div>
+            <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>פיפס</div>
+          </div>
+          <div>
+            <div style={{ color: r.hasR ? (r.value >= 0 ? C.green : C.red) : C.muted,
+              fontSize: 19, fontWeight: 800 }}>
+              {r.hasR ? R.fmt(sel) : '—'}
+            </div>
+            <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>
+              {r.planned ? `תכננת ${r.planned.toFixed(2)}R` : 'R'}
+            </div>
+          </div>
+        </div>
+
+        <Row label="כניסה" value={`${sel.date} ${sel.time || ''} · ${sel.entry}`} />
+        <Row label="יציאה" value={`${sel.closeDate || sel.date} ${sel.closeTime || ''} · ${sel.exitPrice ?? '—'}`} />
+        <Row label="סטופ / מטרה" value={`${sel.sl || '—'} / ${sel.tp || '—'}`} />
+        <Row label="לוט" value={sel.lots ?? '—'} />
+        <Row label="עמלה / swap"
+          value={`${usd(sel.commission ?? 0)} / ${usd(sel.swap ?? 0)}`} color={C.muted} />
+      </Card>
+
+      {/* משמעת */}
+      <Card>
+        <SectionTitle>ציון משמעת</SectionTitle>
+        <ScoreSlider label="עד כמה ביצעת לפי התוכנית?" value={form.disciplineScore}
+          onChange={v => set('disciplineScore', v)}
+          rightLabel="1 — אפס שליטה" leftLabel="10 — שליטה מלאה" />
+      </Card>
+
+      {/* סיבת הפסד */}
+      {loss && (
+        <Card>
+          <SectionTitle>סיבת ההפסד</SectionTitle>
+          <LossReasonPicker value={form.lossReason} onChange={v => set('lossReason', v)} />
         </Card>
       )}
 
-      {/* Result */}
+      {/* מסקנות */}
       <Card>
-        <SectionTitle>תוצאת העסקה</SectionTitle>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, overflow: 'hidden' }}>
-          <div style={{ minWidth: 0 }}>
-            <Input label="תאריך כניסה" type="date" value={form.date} onChange={v => set('date', v)} />
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <Input label="שעת כניסה" type="time" value={form.time} onChange={v => set('time', v)} />
-          </div>
-        </div>
-        {!form.time && (
-          <div style={{ color: C.warn, fontSize: 11, marginTop: -8, marginBottom: 12, lineHeight: 1.6 }}>
-            בלי שעת כניסה העסקה לא תיכנס לפילוח לפי סשן בטאב הניתוח.
-          </div>
-        )}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, overflow: 'hidden' }}>
-          <div style={{ minWidth: 0 }}>
-            <Input label="תאריך סגירה" type="date" value={form.closeDate} onChange={v => set('closeDate', v)} />
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <Input label="שעת סגירה" type="time" value={form.closeTime} onChange={v => set('closeTime', v)} />
-          </div>
-        </div>
-        {form.closeDate && form.closeDate !== form.date && (
-          <div style={{ color: C.warn, fontSize: 11.5, marginTop: -8, marginBottom: 12, lineHeight: 1.6 }}>
-            עסקה שהוחזקה {Math.round((new Date(form.closeDate) - new Date(form.date)) / 864e5)} ימים.
-            הרווח ייוחס ל-{form.closeDate}, והעסקה תיספר ליום המסחר {form.date}.
-          </div>
-        )}
-        <Input label="Setup מס׳" value={form.setupNum} onChange={v => set('setupNum', v)} />
-        <Select label="צמד" value={form.pair} onChange={v => set('pair', v)} options={PAIRS} />
-
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ color: C.muted, fontSize: 11, marginBottom: 7, letterSpacing: 0.5 }}>כיוון</div>
-          <SegmentedControl value={form.direction} onChange={v => set('direction', v)} options={[
-            { value: 'long', label: '🟢 Long', color: C.green },
-            { value: 'short', label: '🔴 Short', color: C.red },
-          ]} />
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-          <Input label="Entry" value={form.entry} onChange={v => set('entry', v)} placeholder="211.40" />
-          <Input label="Stop Loss (מתוכנן)" value={form.sl} onChange={v => set('sl', v)} placeholder="211.05" />
-          <Input label="Take Profit (מתוכנן)" value={form.tp} onChange={v => set('tp', v)} placeholder="212.10" />
-        </div>
-
-        <Input label="מחיר יציאה — איפה העסקה נסגרה בפועל" value={form.exitPrice}
-          onChange={v => set('exitPrice', v)} placeholder="211.80" />
-
-        {levelErrors.length > 0 && (
-          <div style={{ padding: '10px 13px', background: '#1a0808', border: `1px solid ${C.red}55`,
-            borderRadius: 9, color: C.red, fontSize: 12.5, lineHeight: 1.7, marginBottom: 14 }}>
-            {levelErrors.map((e, i) => <div key={i}>• {e}</div>)}
-          </div>
-        )}
-
-        {autoPips !== null && (
-          <div style={{ padding: '10px 13px', background: C.card2, border: `1px solid ${C.border}`,
-            borderRadius: 9, marginBottom: 14, display: 'flex', alignItems: 'center',
-            justifyContent: 'space-between', gap: 10 }}>
-            <span style={{ color: C.muted, fontSize: 12.5 }}>
-              ממחיר היציאה יוצא <b style={{ color: autoPips >= 0 ? C.green : C.red }}>
-                {autoPips > 0 ? '+' : ''}{autoPips} פיפס</b>
-            </span>
-            {parseFloat(form.pips) !== autoPips && (
-              <button onClick={() => {
-                set('pips', String(autoPips));
-                set('result', autoPips > 0 ? 'win' : autoPips < 0 ? 'loss' : 'be');
-              }} style={{
-                background: C.accent + '18', border: `1px solid ${C.accent}66`, color: C.accent,
-                borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-              }}>השתמש</button>
-            )}
-          </div>
-        )}
-
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ color: C.muted, fontSize: 11, marginBottom: 7, letterSpacing: 0.5 }}>תוצאה</div>
-          <SegmentedControl value={form.result} onChange={v => set('result', v)} options={[
-            { value: 'win', label: '🟢 רווח', color: C.green },
-            { value: 'loss', label: '🔴 הפסד', color: C.red },
-            { value: 'be', label: '⚪ BE', color: C.muted },
-          ]} />
-        </div>
-
-        <Input label={`פיפס ${form.result === 'loss' ? '(מינוס להפסד)' : ''}`}
-          type="number" value={form.pips} onChange={v => set('pips', v)}
-          placeholder={form.result === 'loss' ? '-30' : '40'} />
-
-        {(form.result === 'loss' || (parseFloat(form.pips) || 0) < 0) && (
-          <div style={{ marginTop: 4, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
-            <LossReasonPicker value={form.lossReason} onChange={v => set('lossReason', v)} />
-          </div>
-        )}
+        <SectionTitle>מסקנות מהעסקה</SectionTitle>
+        <Textarea value={form.conclusions} onChange={v => set('conclusions', v)}
+          placeholder="מה קרה, מה עבד, מה תעשה אחרת בפעם הבאה..." rows={7} />
       </Card>
 
-      {/* Money */}
-      <Card>
-        <SectionTitle>כסף</SectionTitle>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <Input label="גודל פוזיציה (לוט)" type="number" value={form.lots}
-            onChange={v => set('lots', v)} placeholder="0.08" />
-          <Input label="swap ($)" type="number" value={form.swap}
-            onChange={v => set('swap', v)} placeholder="0" />
-        </div>
-        <div style={{ marginBottom: 14 }}>
-          <Input label="רווח מ-MT5 ($) — לא חובה" type="number" value={form.grossUsd}
-            onChange={v => set('grossUsd', v)}
-            placeholder={grossCalc !== null ? grossCalc.toFixed(2) : '28.15'} />
-          <div style={{ color: C.muted, fontSize: 11, marginTop: -8, lineHeight: 1.7 }}>
-            {grossTyped !== null
-              ? 'משתמש במספר מ-MT5. הפיפס לא משפיעים על חישוב הכסף.'
-              : 'אם תשאיר ריק, הברוטו יחושב מהפיפס לפי שער USDJPY שבהגדרות — מדויק בערך עד כמה סנטים. הזנת המספר מ-MT5 מדויקת לחלוטין.'}
-          </div>
-        </div>
-
-        <div style={{ color: C.muted, fontSize: 11, marginTop: -4, marginBottom: 12, lineHeight: 1.7 }}>
-          swap הוא שלילי כשזו עלות, בדיוק כפי שהוא מופיע ב-MT5. ברוב העסקאות השאר 0.
-          {!pipValue && form.pair !== 'אחר' && (
-            <div style={{ color: C.warn, marginTop: 5 }}>
-              {form.pair} לא מוגדר ב-pairs.js — חישובי הכסף לא יעבדו עליו.
-            </div>
-          )}
-        </div>
-
-        {net !== null && (
-          <div style={{ background: C.card2, borderRadius: 10, padding: '12px 14px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, textAlign: 'center' }}>
-              {[
-                { l: 'ברוטו', v: money(gross), c: gross >= 0 ? C.green : C.red },
-                { l: 'עמלה', v: money(commission), c: C.muted },
-                { l: 'swap', v: money(swap), c: swap < 0 ? C.warn : C.muted },
-                { l: 'נטו', v: money(net), c: net >= 0 ? C.green : C.red },
-              ].map(x => (
-                <div key={x.l}>
-                  <div style={{ color: C.muted, fontSize: 10, marginBottom: 3 }}>{x.l}</div>
-                  <div style={{ color: x.c, fontSize: 14, fontWeight: 700 }}>{x.v}</div>
-                </div>
-              ))}
-            </div>
-            {slPips !== null && slPips > 0 && (
-              <div style={{ color: C.muted, fontSize: 11, marginTop: 10, textAlign: 'center' }}>
-                סטופ {slPips.toFixed(0)} פיפס
-                {form.tp && spec ? ` · תכננת ${(Math.abs(parseFloat(form.tp) - parseFloat(form.entry)) / spec.pip / slPips).toFixed(2)}R` : ''}
-                {' · יצא '}<b style={{ color: pips / slPips >= 0 ? C.green : C.red }}>{(pips / slPips).toFixed(2)}R</b>
-                {grossTyped !== null && grossCalc !== null &&
-                  Math.abs(grossTyped - grossCalc) >= 0.01 &&
-                  ` · פער מהחישוב לפי פיפס: ${money(grossTyped - grossCalc)}`}
-              </div>
-            )}
-          </div>
-        )}
-      </Card>
-
-      {/* Execution */}
-      <Card>
-        <SectionTitle>ביצוע העסקה</SectionTitle>
-        <Check label="העסקה נסגרה לפי התוכנית המקורית" checked={form.closedByPlan} onChange={() => set('closedByPlan', !form.closedByPlan)} />
-        <Check label="כיבדתי את ה-2R" checked={form.respected2R} onChange={() => set('respected2R', !form.respected2R)} />
-        <div style={{ height: 1, background: C.border, margin: '8px 0' }} />
-        <div style={{ color: C.muted, fontSize: 11, marginBottom: 8, letterSpacing: 0.5 }}>חריגות (סמן אם קרה)</div>
-        <Check label="ניסיתי לעשות Home Run ❌" checked={form.triedHomeRun} onChange={() => set('triedHomeRun', !form.triedHomeRun)} danger />
-        <Check label="שיניתי משהו מתוך רגש ❌" checked={form.changedFromEmotion} onChange={() => set('changedFromEmotion', !form.changedFromEmotion)} danger />
-        <Check label="ניסיתי להחזיר הפסד ❌" checked={form.triedToRecover} onChange={() => set('triedToRecover', !form.triedToRecover)} danger />
-        <div style={{ marginTop: 12, padding: '12px 14px', background: '#120808', border: `1px solid ${C.red}33`, borderRadius: 10 }}>
-          <Check label="הפרתי חוק מהתוכנית — יש להפעיל עצירת 48 שעות 🚫"
-            checked={form.violatedRule} onChange={() => set('violatedRule', !form.violatedRule)} danger
-            sub="הזזת SL / משיכת TP / setup מאולתר / ניסיון החזרה" />
-        </div>
-      </Card>
-
-      {/* Mental */}
-      <Card>
-        <SectionTitle>ניתוח מנטלי</SectionTitle>
-        <Textarea label="למה נכנסתי לעסקה?" value={form.whyEntered} onChange={v => set('whyEntered', v)} placeholder="הסיבה האמיתית..." rows={2} />
-        <Textarea label="מה הרגשתי לפני הכניסה?" value={form.feltBefore} onChange={v => set('feltBefore', v)} placeholder="רגוע / לחוץ / סקרן..." rows={2} />
-        <Textarea label="מה הרגשתי בזמן העסקה?" value={form.feltDuring} onChange={v => set('feltDuring', v)} placeholder="ביטחון / פחד / תאווה..." rows={2} />
-        <Textarea label="טעות מנטלית (אם הייתה)" value={form.mentalMistake} onChange={v => set('mentalMistake', v)} placeholder="מה השתבש..." rows={2} />
-        <Textarea label="מה עשיתי טוב?" value={form.whatGood} onChange={v => set('whatGood', v)} placeholder="חגוג כל ניצחון קטן..." rows={2} />
-        <Textarea label="מה אני מתקן בפעם הבאה?" value={form.whatFix} onChange={v => set('whatFix', v)} placeholder="צעד אחד קונקרטי..." rows={2} />
-      </Card>
-
-      {/* Scores */}
-      <Card>
-        <SectionTitle>ציון עצמי</SectionTitle>
-        <ScoreSlider label="משמעת" value={form.disciplineScore} onChange={v => set('disciplineScore', v)} rightLabel="1 — אפס שליטה" leftLabel="10 — שליטה מלאה" />
-        <ScoreSlider label="סבלנות" value={form.patienceScore} onChange={v => set('patienceScore', v)} rightLabel="1 — חסרת סבלנות" leftLabel="10 — סבלני לגמרי" />
-        <ScoreSlider label="שליטה ברגש" value={form.emotionScore} onChange={v => set('emotionScore', v)} rightLabel="1 — הרגש ניהל" leftLabel="10 — ניהלתי את הרגש" />
-        <div style={{ textAlign: 'center', marginTop: 10, padding: '12px', background: avgColor + '11', borderRadius: 10 }}>
-          <span style={{ color: C.muted, fontSize: 13 }}>ממוצע: </span>
-          <span style={{ color: avgColor, fontSize: 26, fontWeight: 700 }}>{avgScore}</span>
-          <span style={{ color: C.muted, fontSize: 13 }}>/10</span>
-        </div>
-      </Card>
-
-      {/* Screenshots */}
+      {/* צילומים */}
       <Card>
         <SectionTitle>📸 Screenshots מטלגרם</SectionTitle>
         <div style={{ color: C.muted, fontSize: 12, marginBottom: 14, lineHeight: 1.7 }}>
-          שלח Screenshot לטלגרם ← לחץ לחיצה ארוכה ← Copy Link ← הדבק כאן
+          שלח Screenshot לטלגרם ← לחיצה ארוכה ← Copy Link ← הדבק כאן
         </div>
         {form.screenshots.map((url, i) => (
-          <TelegramScreenshot key={i} url={url} index={i} onChange={v => {
+          <Screenshot key={i} url={url} index={i} onChange={v => {
             const s = [...form.screenshots]; s[i] = v; set('screenshots', s);
           }} />
         ))}
       </Card>
 
-      <Btn onClick={handleSave} color={C.accent}>💾 שמור עסקה</Btn>
-
-      {/* Recent trades */}
-      {recentTrades.length > 0 && (
-        <Card style={{ marginTop: 24 }}>
-          <SectionTitle>עסקאות אחרונות</SectionTitle>
-          {recentTrades.map(t => (
-            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: `1px solid ${C.border}` }}>
-              <div>
-                <span style={{ color: C.text, fontSize: 14, fontWeight: 600 }}>{t.pair}</span>
-                <span style={{ color: C.muted, fontSize: 11, marginRight: 8 }}>{t.date}</span>
-                {t.violatedRule && <span style={{ color: C.red, fontSize: 10 }}>⚠️ חריגה</span>}
-              </div>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                {typeof t.disciplineScore === 'number' && (
-                  <span style={{ color: C.muted, fontSize: 12 }}>🎯 {t.disciplineScore}/10</span>
-                )}
-                {t.lossReason && (() => {
-                  const r = reasonById(t.lossReason);
-                  return r ? (
-                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 5,
-                      color: r.error ? C.red : C.green,
-                      background: (r.error ? C.red : C.green) + '18', whiteSpace: 'nowrap' }}>
-                      {r.short}
-                    </span>
-                  ) : null;
-                })()}
-                <div style={{ textAlign: 'left', minWidth: 62 }}>
-                  <div style={{ color: RC.value(t) > 0 ? C.green : RC.value(t) < 0 ? C.red : C.muted, fontWeight: 700, fontSize: 17 }}>
-                    {RC.fmt(t)}
-                  </div>
-                  <div style={{ color: C.muted, fontSize: 10 }}>
-                    {t.pips > 0 ? '+' : ''}{t.pips}p
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </Card>
-      )}
+      <Btn onClick={handleSave} color={C.accent}>💾 שמור תיעוד</Btn>
     </div>
   );
 }
