@@ -7,6 +7,9 @@ import {
 import { C, PIE_COLORS } from '../theme';
 import { Card, SectionTitle, StatBox } from './UI';
 import { rContext, fmtR, R_START } from '../rMultiple';
+import { netOf } from '../accountBalance';
+
+const usd = (v) => `${v < 0 ? '−' : ''}$${Math.abs(v).toFixed(0)}`;
 
 // רווח והפסד מיוחסים ליום הסגירה; ספירת עסקאות ליום נשארת על יום הכניסה
 const pnlDate = (t) => t.closeDate || t.date;
@@ -21,7 +24,7 @@ function getWeekKey(dateStr) {
 }
 
 // ── Calendar view ─────────────────────────────────────────────
-function CalendarView({ trades, dailyLogs, R }) {
+function CalendarView({ trades, dailyLogs, R, cfg }) {
   const [viewDate, setViewDate] = useState(new Date());
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -44,8 +47,7 @@ function CalendarView({ trades, dailyLogs, R }) {
     const ts = tradesByDate[dateStr] || [];
     const log = logsByDate[dateStr];
     if (ts.length > 0) {
-      const c = R.coverage(ts);
-      const v = (c.withR && !c.allLegacy) ? c.r : ts.reduce((s, t) => s + (parseFloat(t.pips) || 0), 0);
+      const v = ts.reduce((s, t) => s + netOf(t, cfg), 0);
       return v > 0 ? C.green : v < 0 ? C.red : C.muted;
     }
     // Daily log only — always blue, never red
@@ -82,9 +84,8 @@ function CalendarView({ trades, dailyLogs, R }) {
           const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
           const color = getDayColor(dateStr);
           const ts = tradesByDate[dateStr] || [];
-          const dayCov = R.coverage(ts);
-          const rSum = dayCov.r;
-          const dayPips = ts.reduce((s, t) => s + (parseFloat(t.pips) || 0), 0);
+          const dayUsd = ts.reduce((s, t) => s + netOf(t, cfg), 0);
+          const dayWins = ts.filter(t => netOf(t, cfg) > 0).length;
           const isToday = dateStr === new Date().toISOString().slice(0, 10);
 
           return (
@@ -95,11 +96,17 @@ function CalendarView({ trades, dailyLogs, R }) {
               border: `1px solid ${isToday ? C.accent : color ? color + '55' : C.border}`,
               position: 'relative'
             }}>
-              <div style={{ color: isToday ? C.accent : C.text, fontSize: 12, fontWeight: isToday ? 700 : 400 }}>{day}</div>
+              <div style={{ color: isToday ? C.accent : C.text, fontSize: 11, fontWeight: isToday ? 700 : 400, lineHeight: 1.1 }}>{day}</div>
               {ts.length > 0 && (
-                <div style={{ color: (dayCov.withR ? rSum : dayPips) > 0 ? C.green : C.red, fontSize: 9, fontWeight: 600 }}>
-                  {dayCov.withR && !dayCov.allLegacy ? fmtR(rSum, 1) : `${dayPips > 0 ? '+' : ''}${dayPips.toFixed(0)}p`}
-                </div>
+                <>
+                  <div style={{ color: dayUsd > 0 ? C.green : dayUsd < 0 ? C.red : C.muted,
+                    fontSize: 10, fontWeight: 700, lineHeight: 1.35 }}>
+                    {usd(dayUsd)}
+                  </div>
+                  <div style={{ color: C.muted, fontSize: 7.5, lineHeight: 1 }}>
+                    {ts.length} · {Math.round((dayWins / ts.length) * 100)}%
+                  </div>
+                </>
               )}
             </div>
           );
@@ -178,6 +185,7 @@ function RevengeDetector({ trades, R }) {
 export default function Performance({ data }) {
   const trades = data.trades || [];
   const dailyLogs = data.dailyLogs || [];
+  const cfg = data.settings || {};
   const total = trades.length;
   const [activeSection, setActiveSection] = useState('overview');
 
@@ -432,7 +440,7 @@ export default function Performance({ data }) {
       {/* ── CALENDAR ── */}
       {activeSection === 'calendar' && (
         <>
-          <CalendarView trades={trades} dailyLogs={dailyLogs} R={R} />
+          <CalendarView trades={trades} dailyLogs={dailyLogs} R={R} cfg={cfg} />
           {/* Monthly summary */}
           <Card>
             <SectionTitle>סיכום חודשי</SectionTitle>
@@ -440,8 +448,9 @@ export default function Performance({ data }) {
               const byMonth = {};
               trades.forEach(t => {
                 const m = pnlDate(t).slice(0, 7);
-                if (!byMonth[m]) byMonth[m] = { month: m, r: 0, count: 0, wins: 0, est: 0, withR: 0, pips: 0 };
+                if (!byMonth[m]) byMonth[m] = { month: m, r: 0, count: 0, wins: 0, est: 0, withR: 0, pips: 0, usd: 0 };
                 byMonth[m].pips += (parseFloat(t.pips) || 0);
+                byMonth[m].usd += netOf(t, cfg);
                 if (R.hasR(t)) { byMonth[m].r += R.value(t); byMonth[m].withR++; }
                 else byMonth[m].est++;
                 byMonth[m].count++;
@@ -452,21 +461,13 @@ export default function Performance({ data }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                     <span style={{ color: C.text, fontSize: 15, fontWeight: 700 }}>{m.month}</span>
                     <div style={{ textAlign: 'left' }}>
-                      {m.month >= R_START.slice(0, 7) && m.withR > 0 ? (
-                        <>
-                          <span style={{ color: m.r >= 0 ? C.green : C.red, fontWeight: 700, fontSize: 20 }}>
-                            {fmtR(m.r, 1)}
-                          </span>
-                          <div style={{ color: C.muted, fontSize: 10 }}>
-                            {m.pips > 0 ? '+' : ''}{m.pips.toFixed(0)}p
-                            {m.est > 0 ? ` · ${m.withR}/${m.count} עם R` : ''}
-                          </div>
-                        </>
-                      ) : (
-                        <span style={{ color: m.pips >= 0 ? C.green : C.red, fontWeight: 700, fontSize: 20 }}>
-                          {m.pips > 0 ? '+' : ''}{m.pips.toFixed(0)}p
-                        </span>
-                      )}
+                      <span style={{ color: m.usd >= 0 ? C.green : C.red, fontWeight: 700, fontSize: 20 }}>
+                        {usd(m.usd)}
+                      </span>
+                      <div style={{ color: C.muted, fontSize: 10 }}>
+                        {m.pips > 0 ? '+' : ''}{m.pips.toFixed(0)}p
+                        {m.month >= R_START.slice(0, 7) && m.withR > 0 ? ` · ${fmtR(m.r, 1)}` : ''}
+                      </div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 16 }}>
