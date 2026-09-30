@@ -25,7 +25,7 @@ const key = (d) =>
 const pnlDate = (t) => t.closeDate || t.date;
 
 export default function Dashboard({ data, settings }) {
-  const cfg = settings || data.settings || {};
+  const cfg = useMemo(() => settings || data.settings || {}, [settings, data.settings]);
   const today = new Date();
   const [viewY, setViewY] = useState(today.getFullYear());
   const [viewM, setViewM] = useState(today.getMonth());
