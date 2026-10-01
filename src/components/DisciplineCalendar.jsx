@@ -156,8 +156,9 @@ export default function DisciplineCalendar({ data, save, showToast }) {
         {/* Weekly rules */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 14 }}>
           {[
-            { v: `${wk.used}/${wk.maxTrades}`, l: 'עסקאות השבוע', c: wk.used >= wk.maxTrades ? C.red : wk.used === wk.maxTrades - 1 ? C.warn : C.green },
-            { v: `${wk.losses}/${wk.maxLosses}`, l: 'הפסדים השבוע', c: wk.losses >= wk.maxLosses ? C.red : wk.losses === wk.maxLosses - 1 ? C.warn : C.text },
+            { v: wk.used, l: 'עסקאות השבוע', c: C.green },
+            { v: wk.losses, l: 'הפסדים השבוע', c: wk.losses > 0 ? C.warn : C.text },
+            { v: wk.stopped ? `${wk.daysLeft}ד׳` : '✓', l: wk.stopped ? 'עד פתיחה' : 'מסחר פתוח', c: wk.stopped ? C.red : C.green },
             { v: fmtR(wk.totalR, 1, wk.estimated > 0), l: 'R השבוע', c: wk.totalR >= 0 ? C.green : C.red },
           ].map(x => (
             <div key={x.l} style={{ background: C.card2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 4px', textAlign: 'center' }}>

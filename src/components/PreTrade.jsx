@@ -41,7 +41,7 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
   const allChecked = form.checks.every(Boolean) && form.declarationRead;
   const dayLimit = (daySetups || 0) >= 2;
 
-  // חוקי השבוע: מקסימום 5 עסקאות, ועצירה מלאה ב-3 הפסדים
+  // הכלל היחיד: 3 ימי מסחר מפסידים ברצף — המסחר נפתח בשבוע שאחרי
   const wk = weekStatus(data, data.settings);
 
   // cooldown, מגבלה יומית וחוקי השבוע — כולם חוסמים
@@ -80,26 +80,26 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
             {wk.reasons.map((r, i) => <div key={i}>• {r}</div>)}
           </div>
           <div style={{ color: C.muted, fontSize: 12, marginTop: 8 }}>
-            השבוע נסגר ב-{fmtR(wk.totalR, 2, wk.estimated > 0)}. חזור ביום ראשון.
+            {wk.daysLeft === 1 ? 'מחר נפתח המסחר.' : `עוד ${wk.daysLeft} ימים.`}
           </div>
         </Card>
       )}
 
       {/* Weekly budget — still open */}
       {!isCooldown && !wk.stopped && (
-        <Card style={{ background: C.card2, borderColor: wk.remaining <= 1 || wk.lossesLeft <= 1 ? C.warn + '66' : C.border }}>
+        <Card style={{ background: C.card2, borderColor: C.border }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, textAlign: 'center' }}>
             <div>
-              <div style={{ color: wk.remaining <= 1 ? C.warn : C.accent, fontSize: 20, fontWeight: 700 }}>{wk.remaining}</div>
-              <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>עסקאות שנותרו</div>
+              <div style={{ color: C.accent, fontSize: 20, fontWeight: 700 }}>{wk.used}</div>
+              <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>עסקאות השבוע</div>
             </div>
             <div>
-              <div style={{ color: wk.lossesLeft <= 1 ? C.warn : C.text, fontSize: 20, fontWeight: 700 }}>{wk.lossesLeft}</div>
-              <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>הפסדים עד עצירה</div>
+              <div style={{ color: wk.losses > 0 ? C.warn : C.text, fontSize: 20, fontWeight: 700 }}>{wk.losses}</div>
+              <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>הפסדים השבוע</div>
             </div>
             <div>
               <div style={{ color: wk.totalR >= 0 ? C.green : C.red, fontSize: 20, fontWeight: 700 }}>
-                {fmtR(wk.totalR, 1, wk.estimated > 0)}
+                {fmtR(wk.totalR, 1)}
               </div>
               <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>R השבוע</div>
             </div>
@@ -219,7 +219,7 @@ export default function PreTrade({ data, save, showToast, isCooldown, weekStoppe
 
       <Btn onClick={handleSave} disabled={!allChecked || blocked} color={C.green}>
         {isCooldown ? '🚫 עצירת 48 שעות פעילה'
-          : wk.stopped ? '🚫 שבוע המסחר הסתיים'
+          : wk.stopped ? '🚫 המסחר נעול'
           : dayLimit ? '🚫 מקסימום 2 עסקאות היום'
           : allChecked ? '✓ שמור צ׳קליסט ועבור לעסקה'
           : 'יש לסמן את כל הסעיפים'}

@@ -49,10 +49,9 @@ export default function Weekly({ data, save, showToast, weekTrades, weekPips, we
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
           <StatBox label="R השבוע" value={fmtR(wk.totalR, 2)} color={rColor}
             sub={wk.estimated > 0 ? `על ${wk.trades.length - wk.estimated}/${wk.trades.length}` : undefined} />
-          <StatBox label="עסקאות" value={wk.used} unit={`/${wk.maxTrades}`}
-            color={wk.used >= wk.maxTrades ? C.red : wk.used === wk.maxTrades - 1 ? C.warn : C.accent} />
-          <StatBox label="הפסדים" value={wk.losses} unit={`/${wk.maxLosses}`}
-            color={wk.losses >= wk.maxLosses ? C.red : wk.losses === wk.maxLosses - 1 ? C.warn : C.text} />
+          <StatBox label="עסקאות" value={wk.used} color={C.accent} />
+          <StatBox label="הפסדים" value={wk.losses}
+            color={wk.losses > 0 ? C.warn : C.text} />
         </div>
 
         {wk.stopped ? (
@@ -101,12 +100,13 @@ export default function Weekly({ data, save, showToast, weekTrades, weekPips, we
         <Check label="לבצע רק עסקאות לפי החוקים" checked={form.goalExecution} onChange={() => set('goalExecution', !form.goalExecution)} />
         <Check label="לשמור על 2R קבוע" checked={form.goal2R} onChange={() => set('goal2R', !form.goal2R)} />
         <Check label="לא לנסות להחזיר הפסדים" checked={form.goalNoRecover} onChange={() => set('goalNoRecover', !form.goalNoRecover)} />
-        <Check label={`לא לעבור ${wk.maxTrades} עסקאות השבוע`} checked={form.goalMaxTrades} onChange={() => set('goalMaxTrades', !form.goalMaxTrades)} />
+        <Check label="לא לסחור אחרי 3 ימי הפסד רצופים" checked={form.goalMaxTrades} onChange={() => set('goalMaxTrades', !form.goalMaxTrades)} />
         <Check label="לא להכריח setup שלא קיים" checked={form.goalNoForce} onChange={() => set('goalNoForce', !form.goalNoForce)} />
 
         <div style={{ padding: '12px 14px', background: '#0d1020', borderRadius: 10, marginTop: 8, marginBottom: 14 }}>
           <Check
-            label={`אם אפסיד ${wk.maxLosses} עסקאות — אני מפסיק לסחור עד שבוע הבא`}
+            label="אם יהיו לי 3 ימי מסחר מפסידים ברצף — אני חוזר רק בשבוע שאחרי"
+
             checked={form.confirmedStopOnLosses}
             onChange={() => set('confirmedStopOnLosses', !form.confirmedStopOnLosses)}
           />
@@ -138,7 +138,7 @@ export default function Weekly({ data, save, showToast, weekTrades, weekPips, we
         <SectionTitle>סיכום סוף שבוע</SectionTitle>
 
         <div style={{ marginBottom: 16 }}>
-          <div style={{ color: C.muted, fontSize: 11, marginBottom: 8, letterSpacing: 0.5 }}>עצרתי בזמן — לא עברתי {wk.maxTrades} עסקאות ולא המשכתי אחרי {wk.maxLosses} הפסדים?</div>
+          <div style={{ color: C.muted, fontSize: 11, marginBottom: 8, letterSpacing: 0.5 }}>עצרתי בזמן — לא המשכתי לסחור אחרי 3 ימי הפסד רצופים?</div>
           <YesNo value={form.keptMaxTrades} onChange={v => set('keptMaxTrades', v)} na />
         </div>
         <div style={{ marginBottom: 16 }}>
