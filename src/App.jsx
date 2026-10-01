@@ -10,7 +10,6 @@ import Performance from './components/Performance';
 import Rules       from './components/Rules';
 import DisciplineCalendar from './components/DisciplineCalendar';
 import History     from './components/History';
-import AIAnalysis  from './components/AIAnalysis';
 import AnalysisTab from './AnalysisTab';
 import RiskCalculator from './RiskCalculator';
 import SettingsScreen from './SettingsScreen';
@@ -24,15 +23,13 @@ const TABS = [
   { id: 'week',     icon: '📅', label: 'שבועי' },
   { id: 'perf',     icon: '📊', label: 'ביצועים' },
   { id: 'analysis', icon: '📈', label: 'ניתוח' },
-  { id: 'ai',       icon: '🤖', label: 'AI Coach' },
   { id: 'history',  icon: '🗂', label: 'היסטוריה' },
   { id: 'rules',    icon: '🚨', label: 'חוקים' },
   { id: 'settings', icon: '⚙️', label: 'הגדרות' },
 ];
 
 const DEFAULT_SETTINGS = {
-  maxTradesPerWeek: 5,
-  maxLossesPerWeek: 3,
+  losingDayStreak: 3,
   riskPct: 1,
   usdjpy: 155,
   commissionPerLot: 7,
@@ -203,8 +200,7 @@ export default function App() {
               { label: 'R שבוע', value: fmtR(wk.totalR, 1, wk.estimated > 0), color: wk.totalR >= 0 ? C.green : C.red },
               { label: '%Win', value: `${winRate}%`, color: C.blue },
               { label: 'Setups היום', value: `${daySetups}/2`, color: daySetups >= 2 ? C.red : C.text },
-              { label: 'עסקאות שבוע', value: `${wk.used}/${wk.maxTrades}`, color: wk.used >= wk.maxTrades ? C.red : wk.used === wk.maxTrades - 1 ? C.warn : C.green },
-              { label: 'הפסדים שבוע', value: `${wk.losses}/${wk.maxLosses}`, color: wk.losses >= wk.maxLosses ? C.red : wk.losses === wk.maxLosses - 1 ? C.warn : C.text },
+              { label: 'עסקאות שבוע', value: wk.used, color: C.text },
             ].map(s => (
               <div key={s.label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 9, padding: '8px 12px', textAlign: 'center', minWidth: 70, flexShrink: 0 }}>
                 <div style={{ color: s.color, fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>{s.value}</div>
@@ -258,7 +254,6 @@ export default function App() {
         {tab === 'analysis' && (
           <AnalysisTab theme={C} trades={data.trades} events={events} settings={settings} />
         )}
-        {tab === 'ai'      && <AIAnalysis  {...tabProps} />}
         {tab === 'history' && <History     {...tabProps} />}
         {tab === 'rules'   && <Rules       {...tabProps} />}
         {tab === 'settings' && (

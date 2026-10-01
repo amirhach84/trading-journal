@@ -15,7 +15,7 @@
  * לפני כן לא נשמרו סטופים מתוכננים ולא היה שדה מחיר יציאה,
  * ולכן כל העסקאות הישנות נמדדות בפיפס בלבד.
  */
-export const R_START = '2026-09-01';
+export const R_START = '2026-04-07';
 
 export const isLegacy = (t) => !t || !t.date || t.date < R_START;
 
@@ -76,7 +76,8 @@ export function rOf(t) {
 export function rContext() {
   const of = (t) => {
     // עסקאות מלפני R_START נמדדות בפיפס בלבד
-    if (isLegacy(t)) return { value: 0, hasR: false, legacy: true, issues: [], planned: null };
+    if (isLegacy(t)) return { value: 0, hasR: false, legacy: true, trailed: false, issues: [], planned: null };
+    if (stopWasTrailed(t)) return { value: 0, hasR: false, legacy: false, trailed: true, issues: [], planned: plannedRR(t) };
     const r = rOf(t);
     if (r === null) return { value: 0, hasR: false, legacy: false, issues: dataIssues(t), planned: plannedRR(t) };
     const issues = dataIssues(t);
@@ -104,15 +105,18 @@ export function rContext() {
     legacyCount: (list) => list.filter((t) => of(t).legacy).length,
     sum: (list) => list.reduce((s, t) => (of(t).hasR ? s + of(t).value : s), 0),
     /** { r, withR, count } — תמיד מחזיר גם את הכיסוי */
+    trailedCount: (list) => list.filter((t) => of(t).trailed).length,
     coverage: (list) => {
       const w = list.filter((t) => of(t).hasR);
       const legacy = list.filter((t) => of(t).legacy);
+      const trailed = list.filter((t) => of(t).trailed);
       const modern = list.filter((t) => !of(t).legacy);
       return {
         r: w.reduce((s, t) => s + of(t).value, 0),
         withR: w.length,
         count: list.length,
         legacy: legacy.length,
+        trailed: trailed.length,
         modern: modern.length,
         /** האם כל העסקאות בקבוצה הן מהתקופה הישנה */
         allLegacy: modern.length === 0,
@@ -164,7 +168,23 @@ export function pipsFromExit({ entry, exitPrice, direction, pair }) {
    ------------------------------------------------------------------ */
 export const MIN_SANE_SL = 10;     // סטופ קטן מזה כמעט בוודאות שגיאת הזנה
 
+/**
+ * האם הסטופ הוזז לתוך הרווח.
+ * ב-MT5 נשמר מיקום הסטופ הסופי, ולכן בעסקה רווחית שבה הסטופ
+ * נמצא בצד ה"לא נכון" מדובר בסטופ שהוזז — לא בשגיאה.
+ * במקרה כזה אין דרך לחלץ את הסיכון המקורי, ולכן אין R.
+ */
+export function stopWasTrailed(t) {
+  const e = num(t.entry), s = num(t.sl), pips = num(t.pips);
+  if (e === null || s === null || pips === null || pips <= 0) return false;
+  const long = !String(t.direction || 'long').toLowerCase().startsWith('s');
+  return long ? s >= e : s <= e;
+}
+
 export function dataIssues(t) {
+  // סטופ שהוזז לרווח אינו תקלה — פשוט אין ממנו R
+  if (stopWasTrailed(t)) return [];
+
   const out = [];
   const sl = slPipsOf(t);
   const pips = num(t.pips);
@@ -261,35 +281,105 @@ export function groupR(trades = [], keyFn, R) {
 /* ------------------------------------------------------------------
    חוקי השבוע: 5 עסקאות מקסימום, עצירה ב-3 הפסדים
    ------------------------------------------------------------------ */
-export const WEEK_RULES = { maxTrades: 5, maxLosses: 3, maxPerDay: 2 };
+export const WEEK_RULES = {
+  /** כמה ימי מסחר מפסידים ברצף סוגרים את המסחר */
+  losingDayStreak: 3,
+  /** מגבלה יומית, לא שבועית */
+  maxPerDay: 2,
+};
 
+const DAY = 864e5;
+const toDay = (s) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : null;
+};
+const dayStr = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+/** יום שני של השבוע שבו נמצא התאריך */
+const mondayOf = (ms) => {
+  const dow = new Date(ms).getUTCDay();      // 0=ראשון … 6=שבת
+  return ms - ((dow + 6) % 7) * DAY;         // כמה ימים אחורה עד יום שני
+};
+
+/** יום שני של השבוע שאחרי — כאן המסחר נפתח מחדש */
+export const nextMonday = (ms) => mondayOf(ms) + 7 * DAY;
+
+/**
+ * מאתר את רצף ימי המסחר המפסידים האחרון.
+ * "ימים רצופים" = ימי מסחר עוקבים, לא ימי לוח.
+ * מחזיר { days, lastDay } או null.
+ */
+export function losingStreak(trades = [], need = WEEK_RULES.losingDayStreak) {
+  const byDay = new Map();
+  for (const t of trades) {
+    const k = t.closeDate || t.date;
+    if (!k) continue;
+    byDay.set(k, (byDay.get(k) || 0) + (num(t.pips) || 0));
+  }
+  const days = [...byDay.keys()].sort();
+  let run = [];
+  let last = null;
+  for (const d of days) {
+    if (byDay.get(d) < 0) {
+      run.push(d);
+      if (run.length >= need) last = [...run];
+    } else {
+      run = [];
+    }
+  }
+  return last ? { days: last, lastDay: last[last.length - 1] } : null;
+}
+
+/**
+ * מצב המסחר. אין יותר תקרת עסקאות שבועית —
+ * הכלל היחיד הוא רצף של ימי מסחר מפסידים.
+ */
 export function weekStatus(data = {}, settings = {}) {
-  const maxTrades = num(settings.maxTradesPerWeek) || WEEK_RULES.maxTrades;
-  const maxLosses = num(settings.maxLossesPerWeek) || WEEK_RULES.maxLosses;
+  const need = num(settings.losingDayStreak) || WEEK_RULES.losingDayStreak;
 
   const start = thisWeekStart();
-  const trades = (data.trades || []).filter((t) => t.date >= start);
+  const all = data.trades || [];
+  const trades = all.filter((t) => (t.closeDate || t.date) >= start);
   const open = (data.openTrades || []).filter((t) => t.date >= start);
 
   const used = trades.length + open.length;
   const losses = trades.filter((t) => t.result === 'loss' || (num(t.pips) || 0) < 0).length;
 
-  const R = rContext(data.trades || []);
+  const R = rContext();
   const s = summarizeR(trades, R);
 
+  // רצף ימי ההפסד האחרון. הנעילה היא עד תחילת השבוע הבא —
+  // רצף שנגמר ביום חמישי נפתח ביום שני, לא שבעה ימים קדימה.
+  const streak = losingStreak(all, need);
+  const todayMs = toDay(new Date().toISOString().slice(0, 10));
+  let lockedUntil = null, daysLeft = 0;
+  if (streak) {
+    const endMs = toDay(streak.lastDay);
+    if (endMs !== null && todayMs !== null) {
+      const until = nextMonday(endMs);
+      if (todayMs < until) {
+        lockedUntil = dayStr(until);
+        daysLeft = Math.round((until - todayMs) / DAY);
+      }
+    }
+  }
+
   const reasons = [];
-  if (used >= maxTrades) reasons.push(`${used} מתוך ${maxTrades} העסקאות לשבוע נוצלו`);
-  if (losses >= maxLosses) reasons.push(`${losses} הפסדים השבוע — הכלל אומר לעצור`);
+  if (lockedUntil) {
+    reasons.push(`${need} ימי מסחר מפסידים ברצף: ${streak.days.join(' · ')}`);
+    reasons.push(`המסחר נפתח ביום שני ${lockedUntil}`);
+  }
 
   return {
     weekStart: start,
     trades, open,
-    used, maxTrades, remaining: Math.max(0, maxTrades - used),
-    losses, maxLosses, lossesLeft: Math.max(0, maxLosses - losses),
+    used, losses,
     totalR: s.totalR,
     estimated: s.estimated,
     winRate: s.winRate,
-    stopped: reasons.length > 0,
+    streak, need,
+    lockedUntil, daysLeft,
+    stopped: !!lockedUntil,
     reasons,
   };
 }
