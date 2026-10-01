@@ -150,6 +150,35 @@ const priceKey = (t) => {
   return e === null ? null : `${t.date}|${e.toFixed(5)}`;
 };
 
+const dayNum = (s) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) / 864e5 : null;
+};
+
+/**
+ * התאמה אחרונה לעסקאות ישנות שאין להן מחיר כניסה שמור:
+ * אותו צמד, אותו פיפס, והפרש של עד 5 ימים בתאריך —
+ * כי היומן לפעמים רשם את יום הסגירה ו-MT5 רושם את יום הפתיחה.
+ */
+function matchByShape(inc, pool, taken) {
+  const p = num(inc.pips);
+  const dIn = dayNum(inc.date);
+  if (p === null || dIn === null) return null;
+  let best = null, bestGap = 99;
+  for (const t of pool) {
+    if (taken.has(t)) continue;
+    if (t.mt5Id) continue;
+    if (t.pair !== inc.pair) continue;
+    const tp = num(t.pips);
+    if (tp === null || Math.abs(tp - p) > 0.6) continue;
+    const dT = dayNum(t.date);
+    if (dT === null) continue;
+    const gap = Math.abs(dT - dIn);
+    if (gap <= 5 && gap < bestGap) { best = t; bestGap = gap; }
+  }
+  return best;
+}
+
 /**
  * מחזיר תוכנית מיזוג בלי לשנות כלום — לתצוגה מקדימה.
  * options: { from, addNew }
@@ -167,11 +196,15 @@ export function planMerge(existing = [], incoming = [], options = {}) {
   });
 
   const updates = [], additions = [], unchanged = [], skipped = [];
+  const matched = new Set();
 
   for (const inc of incoming) {
     if (inc.date < from) { skipped.push(inc); continue; }
 
-    const match = byId.get(inc.mt5Id) || byPrice.get(priceKey(inc));
+    const match = byId.get(inc.mt5Id)
+      || byPrice.get(priceKey(inc))
+      || matchByShape(inc, existing, matched);
+    if (match) matched.add(match);
     if (!match) {
       if (addNew) additions.push(inc); else skipped.push(inc);
       continue;
