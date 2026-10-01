@@ -335,14 +335,18 @@ export default function Performance({ data }) {
             <StatBox label="ממוצע משמעת" value={`${avgDisc}/10`} color={C.accent} />
           </div>
 
-          {cov.legacy > 0 && (
+          {(cov.trailed > 0 || estCount > 0 || cov.legacy > 0) && (
             <div style={{ background: C.card2, border: `1px solid ${C.border}`, borderRadius: 10,
-              padding: '11px 13px', marginTop: -4, marginBottom: 16, lineHeight: 1.75, fontSize: 12,
+              padding: '11px 13px', marginTop: -4, marginBottom: 16, lineHeight: 1.8, fontSize: 12,
               color: C.muted }}>
-              <b style={{ color: C.text }}>פיפס עד {R_START}, R מכאן והלאה.</b><br />
-              {cov.legacy} עסקאות מהתקופה שלפני כן נמדדות בפיפס בלבד — אז לא נשמרו
-              סטופים מתוכננים.
-              {estCount > 0 && ` ${estCount} עסקאות חדשות עוד דורשות תיקון ולא נספרות ב-R.`}
+              <b style={{ color: C.text }}>ה-R מחושב על {cov.withR} מתוך {total} עסקאות.</b>
+              {cov.trailed > 0 && (
+                <><br /><b style={{ color: C.green }}>{cov.trailed} עסקאות שבהן הזזת את הסטופ לרווח</b>
+                {' '}— MT5 שומר את מיקום הסטופ הסופי, ולכן אי אפשר לחלץ מהן את הסיכון המקורי.
+                זו התנהגות נכונה, לא תקלה.</>
+              )}
+              {estCount > 0 && <><br />{estCount} עסקאות ללא נתוני סטופ תקינים.</>}
+              {cov.legacy > 0 && <><br />{cov.legacy} עסקאות מלפני {R_START} נמדדות בפיפס בלבד.</>}
             </div>
           )}
 
