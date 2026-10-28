@@ -14,6 +14,12 @@ import AnalysisTab from './AnalysisTab';
 import RiskCalculator from './RiskCalculator';
 import SettingsScreen from './SettingsScreen';
 import { weekStatus, rContext, fmtR } from './rMultiple';
+import AccountSwitcher from './components/AccountSwitcher';
+import {
+  scopeData, unscopeData, accountsOf, activeIdOf, activeAccountOf,
+  propStatus,
+} from './accounts';
+import { netOf } from './accountBalance';
 
 const TABS = [
   { id: 'dash',     icon: '📊', label: 'דאשבורד' },
@@ -75,7 +81,9 @@ export default function App() {
   }, [data, save]);
 
   const addEvent = useCallback((ev) => {
-    const events = [...(data.accountEvents || []), { ...ev, id: ev.id || Date.now() }];
+    const id = activeIdOf(data);
+    const events = [...(data.accountEvents || []),
+      { ...ev, id: ev.id || Date.now(), accountId: id }];
     save({ ...data, accountEvents: events });
     showToast('נרשם בחשבון');
   }, [data, save, showToast]);
@@ -97,32 +105,46 @@ export default function App() {
     );
   }
 
-  const events = data.accountEvents || [];
   const settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
+
+  // ---- תחימה לחשבון הפעיל ----
+  // המסכים מקבלים נתונים של חשבון אחד בלבד, ולא יודעים על חשבונות.
+  const accounts = accountsOf(data);
+  const activeId = activeIdOf(data);
+  const account = activeAccountOf(data);
+  const view = scopeData(data, activeId);
+  const events = view.accountEvents || [];
+
+  const saveScoped = (next) => save(unscopeData(data, next, activeId));
+
+  const prop = account.kind === 'prop'
+    ? propStatus(account, view.trades, (t) => netOf(t, settings))
+    : null;
+  const propBlocked = !!(prop && prop.blocked);
 
   // Computed stats
   const weekStart = getWeekStart();
-  const weekTrades = data.trades.filter(t => new Date(t.date) >= weekStart);
+  const weekTrades = view.trades.filter(t => new Date(t.date) >= weekStart);
   const weekPips   = weekTrades.reduce((s, t) => s + (t.pips || 0), 0);
 
   // חוקי השבוע: מקסימום 5 עסקאות, עצירה ב-3 הפסדים
-  const R = rContext(data.trades);
-  const wk = weekStatus(data, settings);
+  const R = rContext(view.trades);
+  const wk = weekStatus(view, settings);
   const weekStopped = wk.stopped;
-  const cov = R.coverage(data.trades);
+  const cov = R.coverage(view.trades);
   const totalR = cov.r;
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  const dayTrades = data.trades.filter(t => t.date === todayStr);
+  const dayTrades = view.trades.filter(t => t.date === todayStr);
   const weekSetups = weekTrades.length;
-  const daySetups = dayTrades.length + (data.openTrades || []).filter(t => t.date === todayStr).length;
+  const daySetups = dayTrades.length + (view.openTrades || []).filter(t => t.date === todayStr).length;
 
   const isCooldown = !!(data.cooldownUntil && new Date() < new Date(data.cooldownUntil));
 
-  const totalTrades = data.trades.length;
-  const wins = data.trades.filter(t => t.result === 'win').length;
+  const totalTrades = view.trades.length;
+  const wins = view.trades.filter(t => t.result === 'win').length;
   const winRate = totalTrades > 0 ? Math.round((wins / totalTrades) * 100) : 0;
-  const scored = data.trades.filter(t => typeof t.disciplineScore === 'number');
+  const scored = view.trades.filter(t => typeof t.disciplineScore === 'number');
   const avgDisc = scored.length > 0
     ? (scored.reduce((s, t) => s + t.disciplineScore, 0) / scored.length).toFixed(1)
     : '—';
@@ -133,7 +155,7 @@ export default function App() {
   const sortedLogs = [...dailyLogs].sort((a, b) => new Date(b.date) - new Date(a.date));
   for (const log of sortedLogs) { if ((log.disciplineScore || 0) >= 6) streak++; else break; }
 
-  const tabProps = { data, save, showToast };
+  const tabProps = { data: view, save: saveScoped, showToast };
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', direction: 'rtl', fontFamily: "'Noto Serif Hebrew', serif", color: C.text, paddingBottom: 80 }}>
@@ -175,7 +197,12 @@ export default function App() {
               )}
             </div>
             <div>
-              {isCooldown && (
+              {propBlocked && (
+                <div style={{ background: C.red + '22', border: `1px solid ${C.red}66`, borderRadius: 8, padding: '5px 10px', color: C.red, fontSize: 11, fontWeight: 700 }}>
+                  🚫 חוק חשבון הופר
+                </div>
+              )}
+              {isCooldown && !propBlocked && (
                 <div style={{ background: C.red + '22', border: `1px solid ${C.red}44`, borderRadius: 8, padding: '5px 10px', color: C.red, fontSize: 11, fontWeight: 700 }}>
                   🚫 עצירת 48ש׳
                 </div>
@@ -209,6 +236,13 @@ export default function App() {
             ))}
           </div>
 
+          {/* בורר חשבון */}
+          {(accounts.length > 1 || account.kind === 'prop') && (
+            <div style={{ marginBottom: 12 }}>
+              <AccountSwitcher data={data} save={save} showToast={showToast} compact />
+            </div>
+          )}
+
           {/* Tabs */}
           <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${C.border}`, marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, overflowX: 'auto' }}>
             {TABS.map(t => (
@@ -232,19 +266,19 @@ export default function App() {
 
       {/* Content */}
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 16px' }}>
-        {tab === 'dash' && <Dashboard data={data} settings={settings} />}
+        {tab === 'dash' && <Dashboard data={view} settings={settings} />}
         {tab === 'pre' && (
           <>
             <RiskCalculator
               theme={C}
-              trades={data.trades}
+              trades={view.trades}
               events={events}
-              settings={settings}
+              settings={{ ...settings, riskPct: account.riskPct ?? settings.riskPct }}
               onOpenSettings={() => setTab('settings')}
               onApply={applyRisk}
             />
             <div style={{ height: 20 }} />
-            <PreTrade {...tabProps} isCooldown={isCooldown} weekStopped={weekStopped} weekSetups={weekSetups} daySetups={daySetups} />
+            <PreTrade {...tabProps} isCooldown={isCooldown || propBlocked} weekStopped={weekStopped} weekSetups={weekSetups} daySetups={daySetups} />
           </>
         )}
         {tab === 'post'    && <PostTrade   {...tabProps} />}
@@ -252,23 +286,26 @@ export default function App() {
         {tab === 'week'    && <Weekly      {...tabProps} weekTrades={weekTrades} weekPips={weekPips} weekSetups={weekSetups} />}
         {tab === 'perf'    && <Performance {...tabProps} />}
         {tab === 'analysis' && (
-          <AnalysisTab theme={C} trades={data.trades} events={events} settings={settings} />
+          <AnalysisTab theme={C} trades={view.trades} events={events} settings={settings} />
         )}
         {tab === 'history' && <History     {...tabProps} />}
         {tab === 'rules'   && <Rules       {...tabProps} />}
         {tab === 'settings' && (
-          <SettingsScreen
-            theme={C}
-            trades={data.trades}
-            events={events}
-            settings={settings}
-            onSettingsChange={saveSettings}
-            onAddEvent={addEvent}
-            onDeleteEvent={deleteEvent}
-            data={data}
-            save={save}
-            showToast={showToast}
-          />
+          <>
+            <AccountSwitcher data={data} save={save} showToast={showToast} />
+            <SettingsScreen
+              theme={C}
+              trades={view.trades}
+              events={events}
+              settings={settings}
+              onSettingsChange={saveSettings}
+              onAddEvent={addEvent}
+              onDeleteEvent={deleteEvent}
+              data={view}
+              save={saveScoped}
+              showToast={showToast}
+            />
+          </>
         )}
       </div>
     </div>
